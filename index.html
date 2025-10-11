@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Diffusion Transformers with Representation Autoencoders</title>
         <script src="template.v2.js"></script>
         <script src="https://d3js.org/d3.v5.min.js"></script>
         <script src="https://d3js.org/d3-collection.v1.min.js"></script>
@@ -18,14 +19,16 @@
     <body>
         <div class="header-container">
             <div class="header-content">
-              <h1>SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers</h1>
+              <h1>Diffusion Transformers asd with Representation Autoencoders</h1>
+              <p>Representation Autoencoders (RAEs) reuse frozen vision foundation encoders together with lightweight decoders to provide high-fidelity, semantically rich latents for diffusion transformers.</p>
               <div class="button-container">
-                <a href="https://arxiv.org/pdf/2401.08740.pdf" class="button">Paper</a>
-                <a href="https://github.com/willisma/SiT" class="button">Code</a>
+                <a href="ReprDiT_Boyang (24).pdf" class="button">Paper</a>
+                <a href="https://github.com/rae-dit/RAE" class="button">Code</a>
+                <a href="#" class="button">🤗 Models</a>
               </div>
             </div>
             <div class="header-image">
-                <img src="images/teaser_2.png" alt="Teaser Image" class="teaser-image">
+                <img src="images/rae/RAE_teaser.png" alt="Representation Autoencoder teaser" class="teaser-image">
             </div>
         </div>
     <d-article>
@@ -33,11 +36,9 @@
             <div class="byline-container">
                 <div class="byline-column">
                     <h3>Authors</h3>
-                    <p><a href="https://willisma.github.io/" class="author-link">Willis (Nanye) Ma</a></p>
-                    <p><a href="https://marikgoldstein.github.io/" class="author-link">Mark Goldstein</a></p>
-                    <p><a href="http://malbergo.me/" class="author-link">Michael S. Albergo</a></p>
-                    <p><a href="https://nmboffi.github.io/" class="author-link">Nicholas M. Boffi</a></p>
-                    <p><a href="https://wp.nyu.edu/courantinstituteofmathematicalsciences-eve2/" class="author-link">Eric Vanden-Eijnden</a></p>
+                    <p><a href="http://bytetriper.github.io/academica/" class="author-link">Boyang Zheng</a></p>
+                    <p><a href="https://willisma.github.io/" class="author-link">Nanye Ma</a></p>
+                    <p><a href="https://tsb0601.github.io/" class="author-link">Shengbang Tong</a></p>
                     <p><a href="https://www.sainingxie.com/" class="author-link">Saining Xie</a></p>
                 </div>
                 <div class="byline-column">
@@ -45,633 +46,196 @@
                     <p><a href="https://cs.nyu.edu/home/index.html" class="affiliation-link">New York University</a></p>
                 </div>
                 <div class="byline-column">
-                    <h3>Date</h3>
-                    <p>Jan. 9, 2023</p>
+                    <h3>Resources</h3>
+                    <p><a href="ReprDiT_Boyang (24).pdf" class="affiliation-link">Paper (PDF)</a></p>
+                    <p><a href="https://github.com/rae-dit/RAE" class="affiliation-link">Code Repository</a></p>
+                    <p><a href="#" class="affiliation-link">Hugging Face Models</a></p>
                 </div>
             </div>
         </div>
         <d-contents>
             <nav>
                 <h4>Contents</h4>
-                <div><a href="#introduction">Flow and Diffusion</a></div>
-                <div><a href="#framework">Scalable Interpolant Transformers</a></div>
+                <div><a href="#overview">Overview</a></div>
+                <div><a href="#autoencoders">Representation Autoencoders</a></div>
+                <div><a href="#diffusion">Diffusion Transformers</a></div>
+                <div><a href="#scaling">Scaling and Efficiency</a></div>
+                <div><a href="#data">Data and Alignment</a></div>
                 <div><a href="#conclusion">Conclusion</a></div>
             </nav>
         </d-contents>
-        
-        <p>
-            We present <b>S</b>calable <b>i</b>nterpolant <b>T</b>ransformers (SiT), a family of generative models built on the backbone of Diffusion Transformers (DiT)<d-cite key="peebles2023scalable"></d-cite>. 
-            The interpolant framework, which allows for connecting two distributions in a more flexible way than standard diffusion models, 
-            makes possible a modular study of various design choices impacting generative models built on dynamical transport: 
-            using <b><span style="color: #014421">discrete</span></b> vs. <b><span style="color: #014421">continuous</span></b> time learning, 
-            deciding the <b><span style="color: #FF7F00">objective</span></b> for the model to learn, 
-            choosing the <b><span style="color: #8F00FF">interpolant</span></b> connecting the distributions, 
-            and deploying a <b><span style="color: #008080">deterministic</span></b> or <b><span style="color: #008080">stochastic</span></b> sampler. 
-        </p>
-        <p>
-            By carefully introducing the above ingredients, SiT surpasses DiT uniformly across model sizes on the conditional ImageNet 256x256 benchmark using the exact same backbone, number of parameters, and GFLOPs. By exploring various diffusion coefficients, which can be tuned separately from learning, SiT achieves an FID-50K score of <b>2.06</b>.
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>
+                We present <strong>R</strong>epresentation <strong>A</strong>uto<strong>E</strong>ncoders (RAEs), a new class of autoencoders that leverage frozen, pretrained representation encoders to produce high-fidelity, semantically rich latent spaces for generative modeling. Frozen representation encoders such as DINOv2<d-cite key="peebles2023scalable"></d-cite> and SigLIP produce feature tokens that retain sharp semantics even without task-specific fine-tuning. Representation Autoencoders (RAEs) keep these encoders fixed and learn a lightweight ViT decoder that faithfully reconstructs images, providing an information-dense latent space.</p>
+            <p>Training diffusion transformers directly on RAE latents delivers fast and high-quality generation: we reach FID 1.53 on ImageNet 256×256 and FID 1.13 on 512×512 with only 80 training epochs—an order of magnitude fewer updates than prior autoencoder pipelines.</p>
+            <ul>
+                <li>High-fidelity reconstructions from frozen encoders enable semantic-rich latents without expensive posterior collapse fixes.</li>
+                <li>Diffusion transformers converge 10× faster while matching or exceeding state-of-the-art quality.</li>
+                <li>Careful scaling, data balancing, and multimodal alignment make the system robust for downstream generation.</li>
+            </ul>
             <d-figure>
-                <figure>
-                    <img src="images/visuals/sota_2.png" alt="SiT sota">
-                    <figcaption>Selected samples from our largest SiT-XL models trained on ImageNet<d-cite key="russakovsky2015imagenet"></d-cite> at \(512\times512\) and \(256\times256\) resolutions with classifier-free guidance scale of \(4.0\), respectively.</figcaption>
+                <figure class="l-body">
+                    <img src="images/rae/intro.png" alt="Pipeline overview for representation autoencoders">
+                    <figcaption>Pipeline overview: a frozen vision encoder writes semantic tokens, a lightweight decoder reconstructs pixels, and diffusion transformers operate in the latent space.</figcaption>
                 </figure>
             </d-figure>
-            <!-- <d-figure>
-                <svg width="100%" height="100%" viewBox="0 0 320 245" style="min-width: 160px; margin-bottom: -70px"><g id="image_group_fig1" width="320" height="200"><image width="320" height="200" xlink:href="images/visuals/sota_2.png" id="display_image_fig1" x="0" y="0"></image></g></svg>
-                <figcaption>
-                    Selected samples from our largest SiT-XL models trained on ImageNet<d-cite key="russakovsky2015imagenet"></d-cite> at \(512\times512\) and \(256\times256\) resolutions with classifier-free guidance scale of \(4.0\), respectively.
-                </figcaption>
-            </d-figure> -->
-        </p>
-        <section id="introduction">
-            <h2>Flow and Diffusion</h2>
-            <p>
-                In recent years a family of flexible generative model 
-                based on transforming pure noise \(\varepsilon \sim \mathcal{N}(0, \mathbf{I})\) into data \(x_* \sim p(x)\) has emerged.
-                This transformation can be described by a simple time-dependent process $$
-                    x_t = \alpha_t x_* + \sigma_t \varepsilon
-                $$
-                with t defined on \([0, T]\), \(\alpha_t, \sigma_t\) being time-dependent functions and chosen such that \(x_0 \sim p(x)\), \(x_T \sim \mathcal{N}(0, \mathbf{I})\). 
-                At each \(t\), \(x_t\) has a conditional density \(p_t(x | x_*) = \mathcal{N}(\alpha_t x_*, \sigma_t^2\mathbf{I})\), 
-                and our goal is to estimate the marginal density \(p_t(x) = \int p_t(x | x_*) p(x) \mathrm{d}x \).
-                In most cases, the marginal density \(p_t(x)\) is intractable. 
-                Some previous methods<d-cite key="chen2019neural"></d-cite><d-cite key="kingma2018glow"></d-cite><d-cite key="grathwohl2018ffjord"></d-cite><d-cite key="dinh2015nice"></d-cite> focus on maximizing the likelihood \(\log p_t(x)\), whereas modern approaches take advantage of differential equations with the corresponding marginal density \(p_t(x)\) to directly estmate data samples from \(p(x)\).
-            </p>
-            <p> 
-                <b>Diffusion-Based Models.</b>  
-                Diffusion-Based Models<d-cite key="ho2020denoising"></d-cite><d-cite key="kingma2023variational"></d-cite> <d-cite key="nichol2021improved"></d-cite><d-cite key="karras2022elucidating"></d-cite><d-cite key="song2021scorebased"></d-cite> is the most commonly used framework for this transformation.
-                The \(\alpha_t\) and  \(\sigma_t\) are set indrectly by a forward-time stochastic differential equation (SDE) with \(\mathcal{N}(0, \mathbf{I})\) as equilibrium distribution. $$
-                    dX_t = f(X_t, t) \mathrm{d}t + g(t) \mathrm{d} W_t 
-                $$
-                where \(W_t\) is a standard Brownian motion. <br>
-                In practice, the model samples the process by learning the gradient of the likelihood \(\nabla \log p_t(x)\) (score) with a generative model \(s_\theta(x_t, t)\) under the score matching objective $$
-                    \mathcal{L}_s(\theta) = \int \mathbb{E}[\Vert \sigma_t s_\theta(x_t, t) + \varepsilon  \Vert^2] \mathrm{d}t
-                $$
-                Inference is done by solving either a probability flow ODE $$\mathrm{d}X_t =  [f(X_t, t) - \frac{1}{2} g^2(t) \nabla \log p_t(x)] \mathrm{d}t $$
-                or a reverse-time SDE $$
-                    \mathrm{d}X_t = [f(X_t, t) - g^2(t) \nabla \log p_t(x)] \mathrm{d}t + g(t) \mathrm{d} \bar{W}_t
-                $$
-                where \(\bar{W}_t\) is a standard Brownian motion with reversed time. Integrating both equations from \(t = T\) to \(t=0\) with initial condition of a Gaussian noise will push to a data sample approximating \(p(x)\). <br>
-            </p> 
-            <p>
-                <b>Stochastic Interpolant and Flow-Based Models.</b>
-                Stochastic Interpolant and other Flow-Based models<d-cite key="lipman2023flow"></d-cite><d-cite key="albergo2023building"></d-cite><d-cite key="albergo2023stochastic"></d-cite><d-cite key="liu2022flow"></d-cite> are the recent additions to this family, 
-                where the \(\alpha_t\) and  \(\sigma_t\) are restricted on time interval \([0,1]\) with \(\alpha_0 = \sigma_1 = 1\) and \(\alpha_1 = \sigma_0 = 0\), 
-                so that \(x_t\) exactly interpolate between \(x_*\) and \(\varepsilon\). We note that this gives more flexibility in the choice of the interpolating functions, as they are no longer subject to a forward SDE.<br>
-                Furthermore, these models use a simpler probability flow ODE for inference 
-                \[\begin{align*}
-                    \mathrm{d}X_t &= \underbrace{[f(X_t, t) - \frac{1}{2} g^2(t) \nabla \log p_t(x)]}_{\text{directly learn this}} \mathrm{d}t \\
-                    \implies \mathrm{d}X_t &= v(X_t, t) \mathrm{d}t
-                \end{align*}\]
-                where the <em>velocity</em> \(v(X_t, t)\) is estimated by the flow matching objective $$
-                    \mathcal{L}_v(\theta) = \int \mathbb{E}[\Vert v(X_t, t) - \dot \alpha_t x_* - \dot \sigma_t \varepsilon \Vert^2] \mathrm{d}t
-                $$
-                Intuitively, this can be viewed as predicting the velocity of a particle starting moving from some \(\varepsilon\) at time \(t\).
-            </p> 
-            <p>
-                We summarize the components of the above models in the following table:
-                <table class="display-table">
-                    <tr>
-                      <th></th>
-                      <th style="text-align: center;">Diffusion-Based</th>
-                      <th style="text-align: center;">Flow-Based</th>
-                    </tr>
-                    <tr>
-                      <td style="text-align: left;">\( t \)</td>
-                      <td style="text-align: left;">\(\{0, \cdots, T\}\) (DDPM<d-cite key="ho2020denoising"></d-cite>) / \([0,1]\) (SBDM<d-cite key="song2021scorebased"></d-cite>) </td>
-                      <td style="text-align: left;">\([0,1]\)</td>
-                    </tr>
-                    <tr>
-                        <td style="text-align: left;">\( \mathcal{L}(\theta) \)</td>
-                        <td style="text-align: left;">\( \mathcal{L}_s \sim \Vert \sigma_t s_\theta(x_t, t) + \varepsilon\Vert^2 \)</td>
-                        <td style="text-align: left;">\( \mathcal{L}_v \sim \Vert v_\theta(x_t, t) - \dot \alpha_t x_* - \dot \sigma_t \varepsilon \Vert^2 \)</td>
-                    </tr>
-                    <tr>
-                      <td style="text-align: left;">\( x_t \)</td>
-                      <td style="text-align: left;">\( \alpha_t x + \sigma_t \varepsilon \)</td>
-                      <td style="text-align: left;">\( \alpha_t x + \sigma_t \varepsilon \)</td>
-                    </tr>
-                    <tr>
-                      <td style="text-align: left;">ODE</td>
-                      <td style="text-align: left;">\( \mathrm{d}X_t =  [f(X_t, t) - \frac{1}{2} g^2(t) \nabla \log p_t(x)] \mathrm{d}t \)</td>
-                      <td style="text-align: left;">\( dX_t = v(X_t, t) \)</td>
-                    </tr>
-                    <tr>
-                      <td style="text-align: left;">SDE</td>
-                      <td style="text-align: left;">\( dX_t =[f(X_t, t) - g^2(t) \nabla \log p_t(x)] \mathrm{d}t + g(t) \mathrm{d} \bar{W}_t \)</td>
-                      <td><b>?</b></td>
-                    </tr>
-                  </table>
-                It has been proved<d-cite key="albergo2023stochastic"></d-cite> that under the same \(\alpha_t\) and  \(\sigma_t\), Diffusion and Flow-based methods share the same time-evolving process:  
-                Flow-Based ODE's corresponding \(p_t(x)\) coincides with that of Diffusion-Based ODE and SDE. <br>
-                In our work, we proceed to demonstrate the mathematical equivalences and performance influences of other components in the above table. We also managed to fill in the question mark by showing that Flow-Based methods can also be sampled by a reverse-time SDE despite the lack of a forward SDE.
-            </p>
-            <p>
-                
-                <!-- <d-figure>
-                    <figure class="l-body">
-                        <div id='figure1_div'></div>
-                        <script src="figure1.js"></script>
-                        <figcaption>
-                            Examples on which GPT-4V fails while SEAL with the visual search mechanism succeeds. Even though GPT-4V has a much more powerful LLM (GPT-4) than ours (Vicuna-7B), it still occasionally struggles in scenarios that demand extensive visual processing. These situations require precise visual grounding in high-resolution images, a task where the visual search mechanism becomes essential. Click the small images at the bottom to choose different examples.
-                        </figcaption>
-                    </figure>
-                </d-figure> -->
-            </p>
         </section>
-        <section id="framework">
-            <h2>Scalable Interpolant Transformers</h2>
-            <p>
-                From the above table, we summarize the design space into four components. 
-                <ul>
-                    <li><b><span style="color: #014421">Timespace</span></b>: discrete or continuous time interval; </li>
-                    <li><b><span style="color: #FF7F00">Model Prediction</span></b>: the objectives of \(\mathcal{L}_s\) or \(\mathcal{L}_v\);</li>
-                    <li><b><span style="color: #8F00FF">Interpolant</span></b>: the choices of \(\alpha_t\) and \(\sigma_t\);</li>
-                    <li><b><span style="color: #008080">Sampler</span></b>: ODE or SDE.</li>
-                </ul>
-                Systematically varying these components in the design space, we construct our SiT model, which consistently outperforms the DiT model in generating \(256 \times 256\) ImageNet images.
-                <d-figure >
-                    <table class="display-table" style="margin-top:25px;">
-                        <tr>
-                            <th>Model</th>
-                            <th>Params(M)</th>
-                            <th>Training Steps</th>
-                            <th>FID \(\downarrow\)</th>
-                        </tr>
-                        <tr>
-                            <td  style="text-align: left;">DiT-S</td>
-                            <td>33</td>
-                            <td>400K</td>
-                            <td>68.4</td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">SiT-S</td>
-                            <td>33</td>
-                            <td>400K</td>
-                            <td><strong>57.6</strong></td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">DiT-B</td>
-                            <td>130</td>
-                            <td>400K</td>
-                            <td>43.5</td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">SiT-B</td>
-                            <td>130</td>
-                            <td>400K</td>
-                            <td><strong>33.5</strong></td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">DiT-L</td>
-                            <td>458</td>
-                            <td>400K</td>
-                            <td>19.5</td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">SiT-L</td>
-                            <td>458</td>
-                            <td>400K</td>
-                            <td><strong>17.2</strong></td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">DiT-XL</td>
-                            <td>675</td>
-                            <td>400K</td>
-                            <td>9.6</td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">SiT-XL</td>
-                            <td>675</td>
-                            <td>400K</td>
-                            <td><strong>8.6</strong></td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">DiT-XL<sub>(cfg=1.5)</sub></td>
-                            <td>675</td>
-                            <td>7M</td>
-                            <td>2.27</td>
-                        </tr>
-                        <tr>
-                            <td style="text-align: left;">SiT-XL<sub>(cfg=1.5)</sub></td>
-                            <td>675</td>
-                            <td>7M</td>
-                            <td><strong>2.06</strong></td>
-                        </tr>
-                    </table>
-                    <figcaption style="text-align: center;">Across all model sizes, SiT performs better than DiT. <i>What's the source of the performance gain?</i></figcaption>
-                </d-figure>
-            </p>
-            <p>
-                To investigate such performance improvement, we gradually transition from a DiT model, a typical denoising diffusion model (<span style="color: #014421">discrete</span>, <span style="color: #FF7F00">denoising</span>, <span style="color: #8F00FF">variance preserving</span>, and <span style="color: #008080">SDE</span>) to our SiT model via a series of orthogonal steps in the design space. As we progress, we carefully evaluate how each move away from the diffusion model impacts the performance in the following sections. 
-            </p>
-            <p>
-                To conduct such study, we use the same backbone architecture of DiT-B and training hyperparameters for all models. We also maintain number of parameters, GFLOPs, and training schedule (400K steps) to be identical for all models. 
-                All the numbers presented in tables are FID-50K score evaluated with respect to ImageNet256 training set, and produced by a 250 steps Heun ODE solver without otherwise specified. For solving the SDE, we used an Euler-Maruyama integrator. 
-            </p>
-            <h3 id="Timespace"><span style="color: #014421">Timespace</span></h3>
-            <p>
-                The first move away is well-studied: we switch from a discrete-time denoising model to a continuous-time score model. Marginal performance improvement is observed.
-                <d-figure>
-                    <table class="display-table" style="text-align: center;">
-                        <tr>
-                            <th>    </th>
-                            <th><i>Objective</i></th>
-                            <th>FID</th>
-                        </tr>
-                        <tr>
-                            <td>DDPM</td>
-                            <td>\( \mathcal{L}_s^\dagger \)</td>
-                            <td>44.2</td>
-                        </tr>
-                        <tr>
-                            <td>SBDM</td>
-                            <td>\( \mathcal{L}_s \)</td>
-                            <td><strong>43.6</strong></td>
-                        </tr>
-                    </table>
-                    <figcaption style="text-align: center;"><strong>DDPM vs. SBDM.</strong> \( \dagger \) <i>DDPM uses the discretized objective.</i></figcaption>
-                </d-figure>
-            </p>
-            <h3 id="ModelPrediction"><span style="color: #FF7F00">Model Prediction</span></h3>
-            <p>
-                We claim that <i>velocity</i> model is related to <i>score</i> model by a time-dependent weighting function. To be specific, we discovere that \[
-                v(x_t, t) = \frac{\dot \alpha_t}{\alpha_t} x_t - \lambda_t\sigma_t s(x_t, t)
-                \]
-                with \( \lambda_t = \dot \sigma_t - \frac{\dot \alpha_t \sigma_t}{\alpha_t} \). Plug this linear relation into \(\mathcal{L}_v\), we obtain \[
-                \begin{align*}
-                    \mathcal{L}_{v}(\theta) 
-                    &= \int_0^T \lambda_t^2 \mathbb{E}[\Vert  \sigma_t s_\theta(x_t, t) + \varepsilon \Vert^2] \mathrm{d} t \\
-                    &= \mathcal{L}_{s_\lambda}(\theta)
-                \end{align*}
-                \]
-                this aligns with the observation made in <d-cite key="kingma2023understanding"></d-cite>, that different model predictions of diffusion models corresponding to a vanilla denoising objective weighted by different time-dependent functions.
-                We trained all three models and present the results below. 
-                <d-figure>
-                    <table class="display-table" style="text-align: center;">
-                        <tr>
-                            <th>Interpolant</th>
-                            <th><i>Objective</i></th>
-                            <th>FID</th>
-                        </tr>
-                        <tr>
-                            <td>SBDM-VP</td>
-                            <td>\( \mathcal{L}_s\)</td>
-                            <td>43.6</td>
-                        </tr>
-                        <tr>
-                            <td>SBDM-VP</td>
-                            <td>\( \mathcal{L}_{s_\lambda} \)</td>
-                            <td><strong>39.1</strong></td>
-                        </tr>
-                        <tr>
-                            <td>SBDM-VP</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td>39.8</td>
-                        </tr>
-                    </table>
-                    <figcaption style="text-align: center;"><strong>Effect of different model predictions.</strong></figcaption>
-                </d-figure>
-                <br>
-                As \(t \to 0\), \(\dot \sigma_t \to -\infty\) under the variance preserving setting, making \(\lambda_t^2\) blow up to infinity as well. In practice, we follow the setting of SBDM and clip both training and sampling to the interval \([\varepsilon, 1]\) to avoid numerical stability. 
-                As a result, the large \(\lambda_\varepsilon\) is able to compensate for the vanishing gradient of \(\mathcal{L}_s\), but in turn makes \(\mathcal{L}_v\) harder to optimize.
-                <d-figure>
-                    <figure>
-                        <img src="images/time_weight.png" style="display: block; margin-left: auto; margin-right: auto; width: 80%;" alt="time-dependent weighting">
-                        <figcaption style="text-align: center;">Plot of \( \lambda_t^2 \) clipped on \([10^{-5}, 1]\).</figcaption>
-                    </figure>
-                </d-figure>
-            </p>
-            <h3 id="Interpolant"><span style="color: #8F00FF">Interpolant</span></h3>
-            <p>
-                We mainly experiment with three choices of interpolants:
-                <ul>
-                    <li><b>VP</b>: \(\alpha_t = e^{-\tfrac12 \int_0^t\beta_s \mathrm{d} s} \), \( \sigma_t = \sqrt{1- e^{- \int_0^t\beta_s \mathrm{d} s}}\)</li>
-                    <li><b>GVP</b>: \(\alpha_t = \cos(\frac12 \pi t) \), \( \sigma_t = \sin(\frac12 \pi t)\)</li>
-                    <li><b>Linear</b>: \(\alpha_t = 1 - t\), \(\sigma_t = t\)</li>
-                </ul>
-                Below are some examples demonstrating the effects of the above interoplants on simple 1D distributions. On an aligned time interval starting from a standard Gaussian distribution, we note that VP interpolant changes most drastically in both cases while GVP and Linear interpolants are more smooth. Intuitively, such abrupt change in the VP interpolant increases the Lipschitz constant of the velocity field, making its learning more difficult<d-cite key="albergo2023stochastic"></d-cite>. 
-                <d-figure>
-                    <figure>
-                        <div style="display: flex; justify-content: center;">
-                            <img src="images/intpl.gif" style="display: block; margin-left: auto; margin-right: auto; width: 50%;" alt="density interpolation">
-                            <img src="images/intpl_2.gif" style="display: block; margin-left: auto; margin-right: auto; width: 50%;" alt="density interpolation">
-                        </div>
-                        <figcaption >Density Transformation using the above three interpolants.
-                             <b>Left</b>: from a standard Gaussian to Bernoulli distribution defined at \(\pm 1\).
-                             <b>Right</b>: from a standard Gaussian to a Gaussian mixture with two modes at \(-1\) and \(2\). </figcaption>
-                    </figure>
-                </d-figure>
-                Moving from toy examples to image generation tasks, we again observe large performance differences across different interpolants. We present the results below. <br>
-                <br>
-                <d-figure>
-                    <table class="display-table" style="text-align: center;">
-                        <tr>
-                            <th>Interpolant</th>
-                            <th><i>Objective</i></th>
-                            <th>FID</th>
-                        </tr>
-                        <tr>
-                            <td>SBDM-VP</td>
-                            <td>\( \mathcal{L}_v\)</td>
-                            <td>39.8</td>
-                        </tr>
-                        <tr>
-                            <td>GVP</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td><strong>34.6</strong></td>
-                        </tr>
-                        <tr>
-                            <td>Linear</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td>34.8</td>
-                        </tr>
-                    </table>
-                    <figcaption style="text-align: center;"><strong>Effect of interpolants.</strong></figcaption>
-                </d-figure>
-                <br>
-                One possible explanation for this observation is given in the following figure, where we see that the path length (transport cost) is reduced when changing from SBDM-VP to GVP or Linear. Numerically, we also note that the singularity issue of \(\dot \sigma_t\) at \(t = 0\) does not appear with the GVP and Linear interpolants, making the model easier to learn near the data distribution.
-                <br>
-                <d-figure>
-                    <figure>
-                        <img src="images/length_time.png" style="display: block; margin-left: auto; margin-right: auto; width: 80%;" alt="path length">
-                        <figcaption style="text-align: center;"><b>Path Length.</b> The path length \(\mathcal{C}(v) = \int \mathbb{E}[|v(x_t, t)^2|] \mathrm{d}t\) arising from the velocity field at different training steps for the various interpolants; each curve is approximated by 10000 datapoints.
-                            </figcaption>
-                    </figure>
-                </d-figure>
-                
-            </p>
-            <h3 id="Sampler"><span style="color: #008080">Sampler</span></h3>
-            <p>We introduce more flexibility in sampling the <i>velocity</i> model in this section. Firstly, under SBDM setting, the reverse-time SDE for <i>velocity</i> can be constructed in the following way: \[
-                    dX_t = [v(X_t, t) - \frac12 g^2(t)s(X_t, t)]\mathrm{d}t + g(t) \mathrm{d} \bar{W}_t
-                \]
-                where we take advantage of the linear relationship between <i>velocity</i> and <i>score</i> to construct the drift term. We denote \(g(t)\) as the <b>SBDM diffusion coefficient</b>. 
-                Following previous sections, we can also construct such SDE for GVP and Linear interpolants given the relationship \(g^2(t) = 2\lambda_t\sigma_t\). The results are resented below 
-                <d-figure>
-                    <table class="display-table" style="text-align: center;">
-                        <tr>
-                            <th>Interpolant</th>
-                            <th><i>Objective</i></th>
-                            <th>ODE</th>
-                            <th>SDE</th>
-                        </tr>
-                        <tr>
-                            <td>SBDM-VP</td>
-                            <td>\( \mathcal{L}_v\)</td>
-                            <td>39.8</td>
-                            <td>37.8</td>
-                        </tr>
-                        <tr>
-                            <td>GVP</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td>34.6</td>
-                            <td><strong>32.9</strong></td>
-                        </tr>
-                        <tr>
-                            <td>Linear</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td>34.8</td>
-                            <td>33.6</td>
-                        </tr>
-                    </table>
-                    <figcaption style="text-align: center;"><strong>ODE vs. SDE, SBDM diffusion</strong></figcaption>
-                </d-figure>
-            </p>
-            <p>
-                We further proposed that the diffusion coefficient \(g(t)\) can be tuned separately from the learning process. In fact, any non-negative function \(w(t)\) (not necessarily monotone) is eligible to be used as diffusion coefficient, and the reverse-time SDE can thus be generalized to \[
-                    dX_t = [v(X_t, t) - \frac12 w(t)s(X_t, t)]\mathrm{d}t + \sqrt{w(t)} \mathrm{d} \bar{W}_t
-                \]
-                Apart from SBDM coefficient, we also experiment with the choices of \(w(t) = \sigma_t\) (<i>to eliminate the singularity of score near data distribution</i>) and \(w(t) = \sin^2(\pi t)\), as well as their effects on either <i>velocity</i> or <i>score</i> models. 
-                <d-figure>
-                    <table class="display-table" style="text-align: center;">
-                        <tr>
-                            <th>Interpolant</th>
-                            <th><i>Objective</i></th>
-                            <th>\( w(t) = g(t)\) </th>
-                            <th>\( w(t) = \sigma_t \) </th>
-                            <th>\( w(t) = \sin^2(\pi t)\) </th>
-                        </tr>
-                        <tr>
-                            <td>SBDM-VP</td>
-                            <td>\( \mathcal{L}_v\)</td>
-                            <td>37.8</td>
-                            <td>38.7</td>
-                            <td>39.2</td>
-                        </tr>
-                        <tr>
-                            <td>    </td>
-                            <td>\( \mathcal{L}_{s_\lambda}\)</td>
-                            <td>35.7</td>
-                            <td>37.1</td>
-                            <td>37.7</td>
-                        </tr>
-                        <tr>
-                            <td>GVP</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td><strong>32.9</strong></td>
-                            <td>33.4</td>
-                            <td>33.6</td>
-                        </tr>
-                        <tr>
-                            <td>    </td>
-                            <td>\( \mathcal{L}_s \)</td>
-                            <td>38.0</td>
-                            <td>33.5</td>
-                            <td>33.2</td>
-                        </tr>
-                        <tr>
-                            <td>Linear</td>
-                            <td>\( \mathcal{L}_v \)</td>
-                            <td>33.6</td>
-                            <td>33.5</td>
-                            <td>33.3</td>
-                        </tr>
-                        <tr>
-                            <td>    </td>
-                            <td>\( \mathcal{L}_s \)</td>
-                            <td>41.0</td>
-                            <td>35.3</td>
-                            <td>34.4</td>
-                        </tr>
-                    </table>
-                    <figcaption style="text-align: center;"><strong>Evaluation of SDE with different diffusion coefficients</strong>. To make the SBDM-VP competitive we instead use the weighted objective.</figcaption>
-                </d-figure>
-                <br>
-                We note that the optimal choice of diffusion coefficient depends on the interpolant and the objective, and in our experiments, also largely depends on model sizes. Empirically, we observe the best choice for our SiT-XL is a <span style="color: #014421">continuous-time</span> <span style="color: #FF7F00">velocity</span> model with <span style="color: #8F00FF">Linear</span> interpolant and sampled using <span style="color: #008080">SDE</span> with \(w(t) = \sigma_t\) coefficient. 
-            </p>
-            <p>
-                Lastly, we note that the performance of ODE and SDE integrators may differ under different computation budget. As shown below, the ODE converges faster with fewer number of functions evaluations, while the SDE is capable of reaching a much lower final FID score when given a larger computational budget.
-                <d-figure>
-                    <figure>
-                        <img src="images/nfe_sampler.png" style="display: block; margin-left: auto; margin-right: auto; width: 80%;" alt="nfe sampler">
-                        <figcaption style="text-align: center;"><strong>Comparison of ODE and SDE w/ choices of diffusion coefficients.</strong> Each point is evaluated with 10K samples.</figcaption>
-                    </figure>
-                </d-figure>
-            </p>
-            <h3>Classifier-free Guidance</h3>
-            <p>In this section, we give a concise justification for adopting it on the velocity model, and then empirically show that the drastic gains in performance for DiT case carry across to SiT.</p>
-            <p>Guidance for a velocity field means that: (i) that the velocity model \(v_\theta(x_t, t, y)\) takes class labels \(y\) during training, where \(y\) is occasionally masked with a null token \(\emptyset\); and (ii) during sampling the velocity used is \(v_\theta^\zeta(x_t, t, y) = \zeta v_\theta(x_t, t, y) + (1 - \zeta) v_\theta(x_t, t, \emptyset)\) for a fixed \(\zeta > 0\). Given this observation, one can leverage the usual argument for classifier-free guidance on score-based models.
-                For a CFG scale of \(\zeta = 1.5\), DiT-XL sees an improvement in FID from a 9.6 (non-CFG) down to 2.27 (CFG). We observed similar performance improvement with our largest SiT-XL model under identical computation budget and CFG scale. Sampled with an ODE, the FID-50K score improved from 9.4 to 2.15; with an SDE, the FID improved from 8.6 to 2.06. This shows that SiT benefits from the same training and sampling choices explored previously, and can surpass DiT's performance in each training setting, not only with respect to model size, but also with respect to sampling choices.</p>
-                <br>
+        <section id="autoencoders">
+            <h2>Representation Autoencoders</h2> 
+            <p>RAEs freeze pretrained vision encoders and optimize only a compact decoder to reconstruct the input image. Despite never being trained for pixel fidelity, frozen DINOv2 and SigLIP encoders achieve striking reconstruction quality, preserving both fine detail and global semantics.</p>
             <d-figure>
-                <table class="display-table" style="text-align: left;">
-                    <tr>
-                        <th colspan="6">Class-Conditional ImageNet \(256\times256\)</th>
-                    </tr>
-                    <tr>
-                        <th>Model</th>
-                        <th>FID \(\downarrow\)</th>
-                        <th>sFID \(\downarrow\)</th>
-                        <th>IS \(\uparrow\)</th>
-                        <th>Precision \(\uparrow\)</th>
-                        <th>Recall \(\uparrow\)</th>
-                    </tr>
-                    <tr>
-                        <td>BigGAN-deep<d-cite key="brock2019large"></d-cite></td>
-                        <td>6.95</td>
-                        <td>7.36</td>
-                        <td>171.4</td>
-                        <td><strong>0.87</strong></td>
-                        <td>0.28</td>
-                    </tr>
-                    <tr>
-                        <td>StyleGAN-XL<d-cite key="karras2019stylebased"></d-cite></td>
-                        <td>2.30</td>
-                        <td><strong>4.02</strong></td>
-                        <td>265.12</td>
-                        <td>0.78</td>
-                        <td>0.53</td>
-                    </tr>
-                    <tr>
-                        <td>Mask-GIT<d-cite key="chang2022maskgit"></d-cite></td>
-                        <td>6.18</td>
-                        <td>-</td>
-                        <td>182.1</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>ADM<d-cite key="dhariwal2021diffusion"></d-cite></td>
-                        <td>10.94</td>
-                        <td>6.02</td>
-                        <td>100.98</td>
-                        <td>0.69</td>
-                        <td>0.63</td>
-                    </tr>
-                    <tr>
-                        <td>ADM-G, ADM-U</td>
-                        <td>3.94</td>
-                        <td>6.14</td>
-                        <td>215.84</td>
-                        <td>0.83</td>
-                        <td>0.53</td>
-                    </tr>
-                    <tr>
-                        <td>CDM<d-cite key="ho2021cascaded"></d-cite></td>
-                        <td>4.88</td>
-                        <td>-</td>
-                        <td>158.71</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>RIN<d-cite key="jabri2023scalable"></d-cite></td>
-                        <td>3.42</td>
-                        <td>-</td>
-                        <td>182.0</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>Simple Diffusion(U-Net)<d-cite key="hoogeboom2023simple"></d-cite></td>
-                        <td>3.76</td>
-                        <td>-</td>
-                        <td>171.6</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>Simple Diffusion(U-ViT, L)</td>
-                        <td>2.77</td>
-                        <td>-</td>
-                        <td>211.8</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>VDM++<d-cite key="kingma2023understanding"></d-cite></td>
-                        <td>2.12</td>
-                        <td>-</td>
-                        <td>267.7</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>DiT-XL(cfg=1.5)</td>
-                        <td>2.27</td>
-                        <td>4.60</td>
-                        <td>278.24</td>
-                        <td>0.83</td>
-                        <td>0.57</td>
-                    </tr>
-                    <tr>
-                        <td><strong>SiT-XL(cfg=1.5, ODE)</strong></td>
-                        <td>2.15</td>
-                        <td>4.60</td>
-                        <td>258.09</td>
-                        <td>0.81</td>
-                        <td>0.60</td>
-                    </tr>
-                    <tr>
-                        <td><strong>SiT-XL(cfg=1.5, SDE:\(\sigma_t\))</strong></td>
-                        <td><strong>2.06</strong></td>
-                        <td>4.50</td>
-                        <td>270.27</td>
-                        <td>0.82</td>
-                        <td>0.59</td>
-                    </tr>
-                </table>
-                <figcaption><strong>Benchmarking class-conditional image generation on ImageNet 256x256.</strong> SiT-XL surpasses DiT-XL in FID when using either of the samplers, ODE or SDE-based.</figcaption>
+                <figure class="l-body">
+                    <img src="images/rae/reprdit_recon.png" alt="Reconstruction examples produced by RAEs">
+                    <figcaption>Reconstruction examples with a frozen DINOv2-B encoder. Even small RAEs rival SD-VAE quality while keeping rich semantic tokens.</figcaption>
+                </figure>
             </d-figure>
-            
+            <p>Quantitatively, RAEs deliver strong perceptual scores and ImageNet linear probe accuracy without the heavy compression used in variational autoencoders. They also cut reconstruction compute by more than an order of magnitude compared to SD-VAE latents.</p>
+            <div>
+                <table class="display-table" style="margin-top: 25px;">
+                    <thead>
+                        <tr>
+                            <th>Encoder</th>
+                            <th>Decoder</th>
+                            <th>rFID ↓</th>
+                            <th>Top-1 Acc. ↑</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: left;">DINOv2-B/14</td>
+                            <td style="text-align: left;">ViT-B</td>
+                            <td>0.49</td>
+                            <td>84.5%</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">SigLIP-B/16</td>
+                            <td style="text-align: left;">ViT-B</td>
+                            <td>0.38</td>
+                            <td>82.1%</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">MAE-B/16</td>
+                            <td style="text-align: left;">ViT-B</td>
+                            <td>0.16</td>
+                            <td>67.8%</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">SD-VAE</td>
+                            <td style="text-align: left;">—</td>
+                            <td>0.62</td>
+                            <td>~8%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div>
+                <table class="display-table" style="margin-top: 25px;">
+                    <thead>
+                        <tr>
+                            <th>Decoder</th>
+                            <th>rFID ↓</th>
+                            <th>GFLOPs ↓</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: left;">ViT-B</td>
+                            <td>0.58</td>
+                            <td>22.2</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">ViT-L</td>
+                            <td>0.50</td>
+                            <td>78.1</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">ViT-XL</td>
+                            <td>0.49</td>
+                            <td>106.7</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">SD-VAE</td>
+                            <td>0.62</td>
+                            <td>310.4</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
-        
+        <section id="diffusion">
+            <h2>Diffusion Transformers on RAE Latents</h2>
+            <p>Building on the expressive latent space, we adapt diffusion transformers (DiTs) to operate on RAE tokens. Token-aware noise schedules and objective reweighting close the gap between semantic latents and classical pixel-space training.</p>
+            <p>The resulting models converge dramatically faster than diffusion on SD-VAE latents and reach new best FID scores with the same computational budget.</p>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/convergence_compare.png" alt="Convergence comparison between RAEs and SD-VAE">
+                    <figcaption>Training convergence on ImageNet 256×256: RAEs reach strong sample quality in one tenth the number of updates.</figcaption>
+                </figure>
+            </d-figure>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/arch_teaser.png" alt="DiT architecture operating on RAE tokens">
+                    <figcaption>DiT architecture tailored to RAE tokens with resolution-aware schedule shifting and decoder-aware sampling.</figcaption>
+                </figure>
+            </d-figure>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/comparison.PNG" alt="Sample comparison across generative models">
+                    <figcaption>Sample quality comparison against state-of-the-art diffusion baselines on ImageNet 256×256.</figcaption>
+                </figure>
+            </d-figure>
+        </section>
+        <section id="scaling">
+            <h2>Scaling and Efficiency</h2>
+            <p>Because the encoder is frozen, scaling RAEs primarily increases decoder width and depth, keeping training efficient. We explore decoder scaling and demonstrate smooth improvements without overfitting.</p>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/model_width.png" alt="Decoder width scaling trends">
+                    <figcaption>Decoder width scaling: wider RAEs steadily improve reconstruction fidelity while remaining compute-friendly.</figcaption>
+                </figure>
+            </d-figure>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/overfit_width.png" alt="Overfitting analysis for different decoder widths">
+                    <figcaption>Overfitting analysis: RAEs maintain reconstruction quality across decoder sizes without collapsing semantics.</figcaption>
+                </figure>
+            </d-figure>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/recon_grid.png" alt="Reconstruction grid across model scales">
+                    <figcaption>Qualitative reconstructions across model scales show consistent detail preservation.</figcaption>
+                </figure>
+            </d-figure>
+        </section>
+        <section id="data">
+            <h2>Data and Alignment</h2>
+            <p>Balanced data curation and alignment are key to stable training. We mix curated subsets to cover underrepresented concepts, and we track dataset composition and usage during large-scale sampling.</p>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/data_mixture_ratio_w_avg_score.png" alt="Balanced data mixture for training">
+                    <figcaption>Balanced mixture of curated datasets keeps ImageNet-style training stable across tens of billions of tokens.</figcaption>
+                </figure>
+            </d-figure>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/Cumulative_Sum_of_Counts.png" alt="Cumulative data usage statistics">
+                    <figcaption>Cumulative data coverage shows how our sampler maintains diversity during long training runs.</figcaption>
+                </figure>
+            </d-figure>
+            <p>We also support multimodal prompting for downstream creative use cases.</p>
+            <d-figure>
+                <figure class="l-body">
+                    <img src="images/rae/sysprompt.jpg" alt="Multimodal interface for RAE diffusion models">
+                    <figcaption>System prompt interface for guiding diffusion outputs with multimodal instructions.</figcaption>
+                </figure>
+            </d-figure>
+        </section>
         <section id="conclusion">
             <h2>Conclusion</h2>
-            <p>
-                In this work, we have presented Scalable Interpolant Transformers, a simple and powerful framework for image generation tasks. Within the framework, we explored the tradeoffs between a number of key design choices: the choice of a <b><span style="color: #014421">continuous</span></b> or <b><span style="color: #014421">discrete</span></b>-time model, the choice of <b><span style="color: #8F00FF">interpolant</span></b>, the choice of <b><span style="color: #FF7F00">model predcition</span></b>, and the choice of <b><span style="color: #008080">samplers</span></b> . We highlighted the advantages and disadvantages of each choice and demonstrated how careful decisions can lead to significant performance improvements. Many concurrent works<d-cite key="gupta2023photorealistic"></d-cite><d-cite key="liu2023zero1to3"></d-cite><d-cite key="meng2022sdedit"></d-cite> explore similar approaches in a wide variety of downstream tasks, and we leave the application of SiT to these tasks for future works.
-            </p>
+            <p>Representation Autoencoders convert strong vision foundation models into high-fidelity latent spaces that unlock fast, accurate diffusion transformers. Efficient scaling, careful data balancing, and practical interfaces make the approach a compelling alternative to traditional VAE pipelines.</p>
+            <p>Explore the paper, code, and model checkpoints to build on RAEs for your own generative modeling projects.</p>
         </section>
-        
-        </d-article>
-        <d-appendix>
-            <h3>BibTeX</h3>
-            <p class="bibtex">
-                @article{ma2024sit,<br>
-                &nbsp;&nbsp;title={SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers},<br>
-                &nbsp;&nbsp;author={Nanye Ma and Mark Goldstein and Michael S. Albergo and Nicholas M. Boffi and Eric Vanden-Eijnden and Saining Xie},<br>
-                &nbsp;&nbsp;year={2024},<br>
-                &nbsp;&nbsp;eprint={2401.08740},<br>
-                &nbsp;&nbsp;archivePrefix={arXiv},<br>
-                &nbsp;&nbsp;primaryClass={cs.CV}<br>
-                }
-            </p>
-
-            <d-footnote-list></d-footnote-list>
-            <d-citation-list></d-citation-list>
-        </d-appendix>
-
-        <!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
-        <d-bibliography src="bibliography.bib"></d-bibliography>
-
-        <!-- <script type="text/bibliography">
-        
-        </script> -->
-        <script src="contents_bar.js"></script>
-        
-        
-
-    </body>
-
+    </d-article>
     </body>
 </html>
