@@ -1,7 +1,9 @@
 /* Base styles */
 .header-container {
-  background-color: #445d74; /* Blue background */
-  color: #d9e8ed;
+  /* background-color: #445d74; Blue background */
+  background: url("images/rae/RAE_banner.png") no-repeat center;
+  background-size: cover;
+  color: #242728;
   text-align: center; /* Center content on small screens */
   padding: 20px; /* Reduced padding for small screens */
 }

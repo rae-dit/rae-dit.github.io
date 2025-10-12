@@ -19,7 +19,7 @@
     <body>
         <div class="header-container">
             <div class="header-content">
-              <h1>Diffusion Transformers asd with Representation Autoencoders</h1>
+              <h1>Diffusion Transformers with Representation Autoencoders</h1>
               <p>Representation Autoencoders (RAEs) reuse frozen vision foundation encoders together with lightweight decoders to provide high-fidelity, semantically rich latents for diffusion transformers.</p>
               <div class="button-container">
                 <a href="ReprDiT_Boyang (24).pdf" class="button">Paper</a>
@@ -27,9 +27,9 @@
                 <a href="#" class="button">🤗 Models</a>
               </div>
             </div>
-            <div class="header-image">
-                <img src="images/rae/RAE_teaser.png" alt="Representation Autoencoder teaser" class="teaser-image">
-            </div>
+            <!-- <div class="header-image">
+                <img src="images/rae/RAE_teaser1.png" alt="Representation Autoencoder teaser" class="teaser-image">
+            </div> -->
         </div>
     <d-article>
         <div class="byline">
@@ -67,22 +67,34 @@
         <section id="overview">
             <h2>Overview</h2>
             <p>
-                We present <strong>R</strong>epresentation <strong>A</strong>uto<strong>E</strong>ncoders (RAEs), a new class of autoencoders that leverage frozen, pretrained representation encoders to produce high-fidelity, semantically rich latent spaces for generative modeling. Frozen representation encoders such as DINOv2<d-cite key="peebles2023scalable"></d-cite> and SigLIP produce feature tokens that retain sharp semantics even without task-specific fine-tuning. Representation Autoencoders (RAEs) keep these encoders fixed and learn a lightweight ViT decoder that faithfully reconstructs images, providing an information-dense latent space.</p>
-            <p>Training diffusion transformers directly on RAE latents delivers fast and high-quality generation: we reach FID 1.53 on ImageNet 256×256 and FID 1.13 on 512×512 with only 80 training epochs—an order of magnitude fewer updates than prior autoencoder pipelines.</p>
-            <ul>
-                <li>High-fidelity reconstructions from frozen encoders enable semantic-rich latents without expensive posterior collapse fixes.</li>
-                <li>Diffusion transformers converge 10× faster while matching or exceeding state-of-the-art quality.</li>
-                <li>Careful scaling, data balancing, and multimodal alignment make the system robust for downstream generation.</li>
-            </ul>
+
+                Latent generative modeling, where a pretrained autoencoder maps pixels into a latent space for the diffusion process, has become the standard strategy for Diffusion Transformers (DiT)<d-cite key="peebles2023scalable"></d-cite>;
+                however, the autoencoder component has barely evolved. Most DiTs continue to rely on the original VAE encoder<d-cite key="VAE"></d-cite>, which introduces several limitations: outdated backbones that compromise architectural simplicity, low-dimensional latent spaces that restrict information capacity, and weak representations that result from purely reconstruction-based training and ultimately limit generative quality.
+                In this work, we explore replacing the VAE with pretrained representation encoders (e.g., DINO<d-cite key="DINO"></d-cite>, SigLIP<d-cite key="siglip2"></d-cite>, MAE<d-cite key="MAE"></d-cite>) paired with trained decoders, forming what we term <strong>R</strong>epresentation <strong>A</strong>uto<strong>e</strong>ncoders (RAEs).
+            </p>
+                These models provide both high-quality reconstructions and semantically rich latent spaces, while allowing for a scalable transformer-based architecture.
+                Since these latent spaces are typically high-dimensional, a key challenge is enabling diffusion transformers to operate effectively within them. We analyze the sources of this difficulty, propose theoretically motivated solutions, and validate them empirically.
+            </p>
+            <p>
+                Our approach achieves faster convergence without auxiliary representation alignment losses. Using a DiT variant equipped with a lightweight, wide DDT head, we achieve strong image generation results on ImageNet: <strong>1.51</strong> FID at 256x256 (no guidance) and <strong>1.16 / 1.13</strong> at 256x256 and 512x512 (with guidance). 
+                RAE offers clear advantages and should be the new default for diffusion transformer training. 
+            </p>
             <d-figure>
                 <figure class="l-body">
                     <img src="images/rae/intro.png" alt="Pipeline overview for representation autoencoders">
                     <figcaption>Pipeline overview: a frozen vision encoder writes semantic tokens, a lightweight decoder reconstructs pixels, and diffusion transformers operate in the latent space.</figcaption>
                 </figure>
             </d-figure>
+            <p>
+                As with training VAEs, there are two questions to answer:
+                <ul>
+                    <li><b>How well can RAE reconstruct the input image?</b></li>
+                    <li><b>How well can diffusion transformers operate within the RAE latent space?</b></li>
+                </ul>
+            </p>
         </section>
         <section id="autoencoders">
-            <h2>Representation Autoencoders</h2> 
+            <h2>High Fidelity Reconstruction from RAE</h2> 
             <p>RAEs freeze pretrained vision encoders and optimize only a compact decoder to reconstruct the input image. Despite never being trained for pixel fidelity, frozen DINOv2 and SigLIP encoders achieve striking reconstruction quality, preserving both fine detail and global semantics.</p>
             <d-figure>
                 <figure class="l-body">
@@ -164,7 +176,7 @@
             </div>
         </section>
         <section id="diffusion">
-            <h2>Diffusion Transformers on RAE Latents</h2>
+            <h2>Taming Diffusion Transformers for RAE</h2>
             <p>Building on the expressive latent space, we adapt diffusion transformers (DiTs) to operate on RAE tokens. Token-aware noise schedules and objective reweighting close the gap between semantic latents and classical pixel-space training.</p>
             <p>The resulting models converge dramatically faster than diffusion on SD-VAE latents and reach new best FID scores with the same computational budget.</p>
             <d-figure>
