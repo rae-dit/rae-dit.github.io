@@ -221,10 +221,10 @@
   </tr>
 </table>
 
-<table style="width:100%; margin-top:25px; border-collapse:separate; border-spacing:12px;">
+<table style="width:100%; margin-top:25px; margin-left: -20px; border-collapse:separate; border-spacing:12px;">
   <tr>
     <!-- Left column: text -->
-    <td style="vertical-align:top; width:60%; text-align:justify;">
+    <td style="vertical-align:top; width:60%; text-align:justify; font-size: 1em;">
       <p>
         We also evaluate representation quality via linear probing on ImageNet-1K in Table&nbsp;1d.
         Because RAEs use frozen pretrained encoders, they directly inherit the representations of the underlying encoders.
@@ -273,15 +273,291 @@
         </section>
         <section id="diffusion">
             <h2>Taming Diffusion Transformers for RAE</h2>
-            <p>Building on the expressive latent space, we adapt diffusion transformers (DiTs) to operate on RAE tokens. Token-aware noise schedules and objective reweighting close the gap between semantic latents and classical pixel-space training.</p>
-            <p>The resulting models converge dramatically faster than diffusion on SD-VAE latents and reach new best FID scores with the same computational budget.</p>
+            <p>
+              With RAE demonstrating good reconstruction quality, we now proceed to investigate the <em>diffusability</em><dite key="ImprovDiffus"></dite> of its latent space;
+              that is, how easily its latent distribution can be modeled by a diffusion model, and how good the generation performance can be.
+              Empirically, despite the superior reconstruction quality of MAE encoders,
+              we found that DINOv2 produces the strongest generation results, so we adopt it as the default, unless otherwise specified.
+            </p>
+            <p>
+              Following standard practice, we adopt the flow matching objective<dite key="fm"></dite><dite key="rf"></dite> to train the diffusion model, for which we use LightningDiT<dite key="lgt"></dite>, a variant of DiT, as our model backbone.
+            </p>
+            <p>
+              We adopt a patch size of 1, which results in a token length of 256 for all RAEs on 256x256 images, matching the sequence length used by VAE-based DiTs. We note that, Since the
+              computational cost of DiT depends primarily on the sequence length, <b>using RAE latents on DiTs will not incur additional computational cost compared to using VAE latents.</b>
+            </p>
+            <div style="max-width: 1000px; margin: 0 auto;">
+              <table style="width:100%; margin-top:25px; margin-left: -20px; border-collapse:separate; border-spacing:12px; border: none;">
+                <tr>
+                  <!-- Left column: text -->
+                  <td style="vertical-align:top; width:60%; text-align:justify; font-size: 1em;">
+                    <p>
+                      <b>DiT Does Not Work Out of the Box.</b> Surprisingly, the standard diffusion recipe fails with RAE: 
+                      training directly on RAE latents causes a small backbone such as DiT-S to completely fail, while a larger backbone like DiT-XL significantly underperforms it's counterpart with the SD-VAE latents.
+                      To investigate this observation, we raise several hypotheses detailed below, which we will discuss in the following sections:
+                    </p>
+                  </td>
+                  <!-- Right column: table -->
+                  <td style="vertical-align:top; width:40%;">
+                    <figure>
+                      <table class="display-table" style="width:100%;">
+                        <tr>
+                          <th>&nbsp;</th>
+                          <th style="text-align:center;">RAE</th>
+                          <th style="text-align:center;">SD-VAE</th>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left;">DiT-S</td>
+                          <td>215.76</td>
+                          <td><strong>51.74</strong></td>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left;">DiT-XL</td>
+                          <td>23.08</td>
+                          <td><strong>7.13</strong></td>
+                        </tr>
+                      </table>
+                      <figcaption style="font-size: 1em; text-align:center; margin-top:10px;">Standard DiT struggles to model RAE's latent distribution.</figcaption>
+                    </figure>
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <div class="finding-box", style="margin-top: -20px;">
+              <ul>
+                <li><strong>Suboptimal design for diffusion transformers.</strong> When modeling high-dimensional RAE tokens, the optimal design choices for diffusion transformers can diverge from the standard DiT, which was originally tailored for low-dimensional VAE tokens.</li>
+                <li><strong>Suboptimal noise scheduling.</strong> Prior noise scheduling and loss re-weighting tricks are derived for image-based or VAE-based input, and it remains unclear if they transfer well to high-dimension semantic tokens.</li>
+                <li><strong>Diffusion generates noisy latents.</strong> VAE decoders are trained to reconstruct images from noisy latents, making them more tolerant to small noises in diffusion outputs. In contrast, RAE decoders are trained on clean latents and may struggle to generalize.</li>
+              </ul>
+            </div>
+
+
+            <h3>Scaling DiT Width to Match Token Dimensionality</h3>
+
+            <p>
+              To better understand the training dynamics of Diffusion Transformers in RAE latent space, we construct a simplified experiment:
+              we randomly select <b>a single image</b>, encode it by RAE, and test whether the diffusion model can <em>reconstruct</em> it. Starting from a DiT-S, we first vary the model width while fixing depth.
+              We fix the RAE encoder to DINOv2-B with token dimension of 768.
+            </p>
+            <p>
+              As shown in the following figure<a href="#fig-overfit_width"></a>, sample quality is poor when the model width $d < $ token dimension $n=768$,
+              but improves sharply and reproduces the input almost perfectly once $d >= n$. Training losses exhibit the same trend, converging only when $d >= n$.
+              One might suspect that this improvement still arises from the larger model capacity, but again as shown in the following figure<a href="#fig-overfit_width"></a>,
+              even when doubling the depth from 12 to 24, the generated images remain artifact-heavy, and the training losses fail to converge to similar level of $d = 768$.
+            </p>
+            
             <d-figure>
-                <figure class="l-body">
-                    <img src="images/rae/convergence_compare.png" alt="Convergence comparison between RAEs and SD-VAE">
-                    <figcaption>Training convergence on ImageNet 256×256: RAEs reach strong sample quality in one tenth the number of updates.</figcaption>
-                </figure>
+              <figure class="l-body">
+                  <img src="images/rae/overfit_width.png" id="fig-overfit_width" alt="Overfitting analysis for different decoder widths">
+                  <figcaption><b>Overfitting to a single sample.</b> Left: increasing model width lead to lower loss and better sample quality; Right: changing model depth has marginal effect on overfitting results.</figcaption>
+              </figure>
             </d-figure>
-            <d-figure>
+
+            <p>
+              Together, the results indicate that for generation in RAE's latent space to succeed, <b>the diffusion model's width must match or exceed the RAE's token dimension</b>.
+              This appears to contradict the common belief that data usually has low intrinsic dimension <d-cite key="pope2021intrinsic"></d-cite> and thus allowing generative models like GAN to operate effectively without scaling width to the full data dimension <d-cite key="styleganxl"></d-cite>.
+              We note that this is due to the nature of diffusion models, where the injected Gaussian noise during training extends the data distribution’s support to the entire space, thereby "diffusing" the data manifold into a full-rank one, requiring model capacity that scales with the full data dimensionality.
+            </p>
+
+            <div style="max-width: 1000px; margin: 0 auto;">
+              <table style="width:100%; margin-top:25px; margin-left: -20px; margin-right: -30px; margin-bottom: -25px; border-collapse:separate; border-spacing:12px; border: none;">
+                <tr>
+                  <!-- Left column: text -->
+                  <td style="vertical-align:top; width:50%; text-align:justify; font-size: 1em;">
+                    <p>
+                      We further extend our investigation to a more practical setting by examining three models of varying width, \{DiT-S, DiT-B, DiT-L\}. Each model is overfit on a single image encoded by {DINOv2-S, DINOv2-B, DINOv2-L}, respectively, corresponding to different token dimensions of {384, 768, 1024}.
+                    </p>
+                  </td>
+                  <!-- Right column: table -->
+                  <td style="vertical-align:top; width:40%;">
+                    <figure>
+                      <table class="display-table" style="width:100%; ">
+                        <tr>
+                          <th>&nbsp;</th>
+                          <th style="text-align:center; font-size: 0.8em;">DiT-S</th>
+                          <th style="text-align:center; font-size: 0.8em;">DiT-B</th>
+                          <th style="text-align:center; font-size: 0.8em;">DiT-L</th>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left; font-size: 0.75em;">DINOv2-S</td>
+                          <td style="font-size: 0.75em;">3.6e<sup>-2</sup> <span style="color:green;">✓</span></td>
+                          <td style="font-size: 0.75em;">1.0e<sup>-3</sup> <span style="color:green;">✓</span></td>
+                          <td style="font-size: 0.75em;">9.7e<sup>-4</sup> <span style="color:green;">✓</span></td>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left; font-size: 0.75em;">DINOv2-B</td>
+                          <td style="font-size: 0.75em;">5.2e<sup>-1</sup> <span style="color:red;">✗</span></td>
+                          <td style="font-size: 0.75em;">2.4e<sup>-2</sup> <span style="color:green;">✓</span></td>
+                          <td style="font-size: 0.75em;">1.3e<sup>-3</sup> <span style="color:green;">✓</span></td>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left; font-size: 0.75em;">DINOv2-L</td>
+                          <td style="font-size: 0.75em;">6.5e<sup>-1</sup> <span style="color:red;">✗</span></td>
+                          <td style="font-size: 0.75em;">2.7e<sup>-1</sup> <span style="color:red;">✗</span></td>
+                          <td style="font-size: 0.75em;">2.2e<sup>-2</sup> <span style="color:green;">✓</span></td>
+                        </tr>
+                      </table>
+                      <figcaption style="font-size: 1em; text-align:center; margin-top:10px;"><strong>Overfitting losses.</strong></figcaption>
+                    </figure>
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+
+            <p>As shown above, convergence occurs only when the model width is at least as large as the token dimension (e.g., DiT-B with DINOv2-B), while the loss fails to converge otherwise (e.g., DiT-S with DINOv2-B).</p>
+
+            <div class="finding-box", style="margin-top: 0px">
+              <ul>
+                <li><strong>Suboptimal design for diffusion transformers.</strong>We now fix the width of DiT to be at least as large as the RAE token dimension. For RAE with the DINOv2-B encoder, we pair it with DiT-XL in our following experiments.</li>
+              </ul>
+            </div>
+
+
+            <h3>Dimension-Dependent Noise Schedule Shift</h3>
+
+            <p>
+
+              Many prior works <d-cite key="teng2023relay"></d-cite>, <d-cite key="chen2023importance"></d-cite>, <d-cite key="simplediffusion"></d-cite>, <d-cite key="SD3"></d-cite> have observed that,
+              for inputs $\mathbf{z} \in \mathbb{R}^{C\times H\times W}$, increasing the spatial resolution ($H \times W$) reduces information corruption at the same noise level, impairing diffusion training.
+              These findings, however, are based mainly on pixel- or VAE-encoded inputs with few channels (e.g., $C \leq 16$).
+              In practice, the Gaussian noise is applied to both spatial and channel dimensions; as the number of channels increases, the effective “resolution” per token also grows, reducing information corruption further. We therefore argue that proposed resolution-dependent strategies in these prior works should be generalized to the \textit{effective data dimension}, defined as the number of tokens times their dimensionality.
+            </p>
+
+
+
+            <div style="max-width: 1000px; margin: 0 auto;">
+              <table style="width:100%; margin-top:-10px; margin-left: -20px; margin-bottom: -20px; border-collapse:separate; border-spacing:12px; border: none;">
+                <tr>
+
+                  <!-- Right column: table -->
+                  <td style="vertical-align:top; width:40%;">
+                    <figure>
+                      <table class="display-table" style="width:60%;">
+                        <tr>
+                          <th>&nbsp;</th>
+                          <th style="text-align:center;">gFID</th>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left;">w/o shift</td>
+                          <td>23.08</td>
+                        </tr>
+                        <tr style="background-color:#f0f0f0; color:#666;">
+                          <td style="text-align:left;">w/ shift</td>
+                          <td><strong>4.81</strong></td>
+                        </tr>
+                      </table>
+                      <figcaption style="font-size: 1em; text-align:center; margin-top:10px;"><strong>Impact of schedule shift.</strong></figcaption>
+                    </figure>
+                  </td>
+                  <!-- Left column: text -->
+                  <td style="vertical-align:top; width:60%; text-align:justify; font-size: 1em;">
+                    <p>
+                      Specifically, We adopt the shifting strategy of<d-cite key="SD3"></d-cite>: for a schedule $t_n \in [0,1]$ and input dimensions $n,m$, the shifted timestep is defined as $t_m = \frac{\alpha t_n}{1 + (\alpha-1) t_n}$ where $\alpha = \sqrt{m/n}$ is a dimension-dependent scaling factor.
+                      We follow<d-cite key="SD3"></d-cite> in using $n=4096$ as the base dimension and set $m$ to the effective data dimension of RAE.
+                    </p>
+                  </td>
+                  
+                </tr>
+              </table>
+            </div>
+
+            <p>This this yields significant performance gains, showing its importance for training diffusion models in the high-dimensional RAE latent space.</p>
+
+            <div class="finding-box", style="margin-top: 0px">
+              <ul>
+                <li><strong>Suboptimal noise scheduling.</strong> We now default the noise schedule to be dependent on the effective data dimension for all our following experiments.</li>
+              </ul>
+            </div>
+
+            <h3>Noise-Augmented Decoding</h3>
+
+            <p>
+              Unlike VAEs, whose latents follow a continuous distribution $\mathcal{N}(\mu, \sigma^2\mathbf{I})$<d-cite key="VAE"></d-cite>,
+              the RAE decoder $D$ is trained to reconstruct images from a discrete latent distribution $p(\mathbf{z}) = \sum_i \delta(\mathbf{z} - \mathbf{z}_i)$, where ${\mathbf{z}_i}$ are encoder outputs from the training set.
+              At inference, diffusion-generated latents may deviate slightly from this distribution due to imperfect training or sampling<d-cite key="abuduweili2024enhancing"></d-cite>, leading to out-of-distribution artifacts and degraded sample quality.
+
+              To address this, following prior work in Normalizing Flows<d-cite key="dinh2016density"></d-cite>, <d-cite key="ho2019flow++"></d-cite>, <d-cite key="zhai2024normalizing"></d-cite>, we add Gaussian noise $\mathbf{n} \sim \mathcal{N}(0, \sigma^2\mathbf{I})$ during decoder training.
+              Instead of decoding from the clean distribution $p(\mathbf{z})$, we train on its smoothed variant $p_{\mathbf{n}}(\mathbf{z}) = \int p(\mathbf{z} - \mathbf{n})\mathcal{N}(0, \sigma^2\mathbf{I})(\mathbf{n})\mathrm{d}\mathbf{n}$, improving generalization to the denser latent space of diffusion models.
+              We further sample $\sigma$ from $|\mathcal{N}(0, \tau^2)|$ to regularize training and enhance robustness.
+            </p>
+
+            <div style="max-width: 1000px; margin: 0 auto;">
+              <table style="width:100%; margin-top:-10px; margin-left: -20px; margin-bottom: -20px; margin-right: -30px; border-collapse:separate; border-spacing:12px; border: none;">
+                <tr>
+                  <!-- Right column: table -->
+                  <td style="vertical-align:top; width:40%;">
+                    <figure>
+                      <table class="display-table" style="width:80%; font-size:0.9em;">
+                        <tr>
+                          <th>&nbsp;</th>
+                          <th style="text-align:center;">gFID</th>
+                          <th style="text-align:center;">rFID</th>
+                        </tr>
+                        <tr>
+                          <td style="text-align:left;"> $\mathbf{z} \sim p(\mathbf{z})$</td>
+                          <td>4.81</td>
+                          <td>0.49</td>
+                        </tr>
+                        <tr style="background-color:#f0f0f0; color:#666;">
+                          <td style="text-align:left;"> $\mathbf{z} \sim p_\mathbf{n}(\mathbf{z})$</td>
+                          <td><strong>4.28</strong></td>
+                          <td>0.57</td>
+                        </tr>
+                      </table>
+                      <figcaption style="font-size: 1em; text-align:center; margin-top:10px;"><strong>Impact of $p_\mathbf{n}(\mathbf{z})$.</strong></figcaption>
+                    </figure>
+                  </td>
+                  <!-- Left column: text -->
+                   <td style="vertical-align:top; width:60%; text-align:justify; font-size: 1em;">
+                    <p>
+                      We analyze how $p_\mathbf{n}(\mathbf{z})$ affects reconstruction and generation. As shown on the right, it improves gFID but slightly worsens rFID.
+                      This trade-off is expected: adding noise smooths the latent distribution and, therefore, helps reduce OOD issues for the decoder, but also removes fine details, lowering reconstruction quality. 
+                    </p>
+                  </td>
+                  
+                </tr>
+              </table>
+            </div>
+
+            <div class="finding-box", style="margin-top: 0px">
+              <ul>
+                <li><strong>Diffusion generates noisy latents.</strong> We now adopt the noise-augmented decoding for all our following experiments.</li>
+              </ul>
+            </div>
+            
+
+            <div style="max-width: 1000px; margin: 0 auto;">
+              <table style="width:100%; margin-left: -20px; margin-right: -30px; border-collapse:separate; border-spacing:12px;">
+                <tr>
+
+                  <!-- Left column: text -->
+                  <td style="vertical-align:top; width:55%; text-align:justify; font-size: 1em;">
+                    <p>
+                      Combining all the above techniques, we train a DiT-XL model on RAE latents, which achieves a gFID of 4.28 (<a href="#fig-compare_convergence">Right</a>) after only 80 epochs and 2.39 after 720 epochs.
+                      With the same model size, this not only surpasses prior diffusion baselines (e.g., SiT-XL<d-cite key="sit"></d-cite>) trained on VAE latents—achieving a 47× training speedup—but also outpaces recent representation-alignment methods (e.g., REPA-XL<d-cite key="repa"></d-cite>) with a 16× faster convergence.
+                    </p>
+                  </td>
+
+                  <!-- Right column: table -->
+                  <td style="vertical-align:top; width:60%;">
+                    <d-figure>
+                      <figure class="l-body">
+                          <img src="images/rae/convergence_compare.png" alt="Convergence comparison between RAEs and SD-VAE">
+                          <figcaption>Training convergence on ImageNet 256×256: RAEs reach strong sample quality in one tenth the number of updates.</figcaption>
+                      </figure>
+                  </d-figure>
+                  </td>
+                  
+                </tr>
+              </table>
+            </div>
+
+            <p>In the following sections, we investigate ways to make RAE generation more efficient and effective, pushing it toward state-of-the-art performance.</p>
+            
+            
+            <!-- <d-figure>
                 <figure class="l-body">
                     <img src="images/rae/arch_teaser.png" alt="DiT architecture operating on RAE tokens">
                     <figcaption>DiT architecture tailored to RAE tokens with resolution-aware schedule shifting and decoder-aware sampling.</figcaption>
@@ -291,8 +567,8 @@
                 <figure class="l-body">
                     <img src="images/rae/comparison.PNG" alt="Sample comparison across generative models">
                     <figcaption>Sample quality comparison against state-of-the-art diffusion baselines on ImageNet 256×256.</figcaption>
-                </figure>
-            </d-figure>
+                </figure> -->
+            <!-- </d-figure>
         </section>
         <section id="scaling">
             <h2>Scaling and Efficiency</h2>
@@ -305,18 +581,12 @@
             </d-figure>
             <d-figure>
                 <figure class="l-body">
-                    <img src="images/rae/overfit_width.png" alt="Overfitting analysis for different decoder widths">
-                    <figcaption>Overfitting analysis: RAEs maintain reconstruction quality across decoder sizes without collapsing semantics.</figcaption>
-                </figure>
-            </d-figure>
-            <d-figure>
-                <figure class="l-body">
                     <img src="images/rae/recon_grid.png" alt="Reconstruction grid across model scales">
                     <figcaption>Qualitative reconstructions across model scales show consistent detail preservation.</figcaption>
                 </figure>
             </d-figure>
         </section>
-        <section id="sec-ddt" style="margin-top:24px;">
+        <section id="sec-ddt" style="margin-top:24px;"> -->
 <section id="sec-ddt" style="margin-top:24px;">
   <h2>Wide Diffusion Head</h2>
 
@@ -355,7 +625,7 @@
   </div>
 
   <!-- Row 1: first two figures -->
-  <div style="display:flex; gap:12px; align-items:flex-start; clear:both; margin-top:10px;">
+  <div style="display:flex; gap:12px; align-items:flex-start; clear:both; margin-top:20px; margin-bottom: 20px;">
     <figure id="fig-DiTvsDiTDH" style="flex:1; margin:0;">
       <img
         src="images/ditdh_vs_ditxl.png"
@@ -364,7 +634,7 @@
         onerror="this.outerHTML='<div class=&quot;todo&quot;>TODO: images/ditdh_vs_ditxl.png not found — please add the image.</div>'"
       />
       <figcaption style="font-size:0.85em;">
-        <strong>DiT<sup>DH</sup></strong> scales much better than large DiT with RAE latents.
+        <strong>DiT<sup>DH</sup></strong> scales much better than large DiT.
       </figcaption>
     </figure>
 
@@ -376,7 +646,7 @@
         onerror="this.outerHTML='<div class=&quot;todo&quot;>TODO: images/convergence_teaser_standalone.png not found — please add the image.</div>'"
       />
       <figcaption style="font-size:0.85em;">
-        <strong>DiT<sup>DH</sup></strong> with RAE converges faster than VAE-based methods.
+        <strong>DiT<sup>DH</sup></strong> converges faster than VAE-based methods.
       </figcaption>
     </figure>
   </div>

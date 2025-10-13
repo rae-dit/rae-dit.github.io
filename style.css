@@ -9,10 +9,23 @@
 }
 
 
-.header-content h1 {
+/* .header-content h1 {
   font-size: 1.5em; /* Adjust font size for small screens */
+  /* margin-bottom: 0.5em; */
+  /* line-height: 1.2; */
+/* } */
+
+.header-content h1 {
+  font-size: 1.5em;
   margin-bottom: 0.5em;
   line-height: 1.2;
+  color: #fff;
+  /* -webkit-text-stroke: 3px #000; Black outline */
+  text-shadow:
+    1.2px 1.2px 0 rgb(35, 35, 35),
+    -1.2px -1.2px 0 rgb(35, 35, 35),
+    1.2px -1.2px 0 rgb(35, 35, 35),
+    -1.2px  1.2px 0 rgb(35, 35, 35);
 }
 
 .header-image img {
@@ -245,4 +258,30 @@ d-article d-contents nav > ul > li > a:hover {
 
 d-article section{
   margin: 0 !important;
+}
+
+/* Finding box styling - converted from LaTeX tcolorbox */
+.finding-box {
+  background-color: rgba(240, 240, 240, 0.9); /* white!90!gray - soft ivory background */
+  border: 1.2pt solid rgba(25, 25, 25, 0.6); /* teal!60!black - deep teal frame */
+  border-radius: 10pt; /* arc=5pt - modern rounded corners */
+  padding: 2pt 10pt; /* top/bottom=2pt, left/right=10pt */
+  margin: 0.5em 0; /* vertical spacing similar to LaTeX \vspace */
+  box-shadow: 2px 2px 4px rgba(128, 128, 128, 0.3); /* drop shadow=gray!50!white - subtle shadow */
+  box-sizing: border-box;
+}
+
+.finding-box ul {
+  margin: 0.5em 0;
+  padding-left: 1.2em;
+  list-style-type: disc;
+}
+
+.finding-box li {
+  margin-bottom: 0.5em;
+  line-height: 1.5;
+}
+
+.finding-box li:last-child {
+  margin-bottom: 0;
 }
