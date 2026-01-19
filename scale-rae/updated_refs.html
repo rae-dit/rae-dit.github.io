@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Scaling Text-to-Image Diffusion Transformers with Representation Autoencoders</title>
+        <script src="template.v2.js"></script>
+        <script src="https://d3js.org/d3.v5.min.js"></script>
+        <script src="https://d3js.org/d3-collection.v1.min.js"></script>
+        <script src="https://rawgit.com/nstrayer/slid3r/master/dist/slid3r.js"></script>
+        <script src="cross_fade.js"></script>
+        <link rel="stylesheet" href="style.css">
+        <script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['\\[','\\]'], ['$$','$$']],
+      packages: {'[+]': ['ams', 'textmacros']}  // enables \text
+    },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
+            onload="renderMathInElement(document.body);"></script>
+    </head>
+    <body>
+        <div class="header-container">
+            <div class="header-content">
+              <h1>Scaling Text-to-Image Diffusion Transformers with Representation Autoencoders</h1>
+              <p>We scale Representation Autoencoders (RAEs) to large-scale text-to-image synthesis. Compared to it's VAE counterpart, RAEs offer faster convergence and improved generation quality across model scales, training compute and training stages.</p>
+              <div class="button-container">
+                <a href="" class="button">Paper</a>
+                <a href="" class="button">Code</a>
+                <a href="" class="button">🤗 Models</a>
+              </div>
+            </div>
+            <!-- <div class="header-image">
+                <img src="images/rae/RAE_teaser1.png" alt="Scaling Text-to-Image Diffusion Transformers with Representation Autoencoders teaser" class="teaser-image">
+            </div> -->
+        </div>
+    <d-article>
+        <div class="byline">
+            <div class="byline-container">
+                <div class="byline-column">
+                    <h3>Authors</h3>
+                    <p><a href="https://tsb0601.github.io/" class="author-link">Shengbang Tong</a></p>
+                    <p><a href="http://bytetriper.github.io/" class="author-link">Boyang Zheng</a></p>
+                    <p><a href="https://scholar.google.com/citations?user=TGVM-SYAAAAJ" class="author-link">Ziteng Wang</a></p>
+                    <p><a href="https://tang-bd.github.io/" class="author-link">Bingda Tang</a></p>
+                    <p><a href="https://willisma.github.io/" class="author-link">Nanye Ma</a></p>                  
+                </div>
+                <div class="byline-column">
+                    <p><a href="https://ellisbrown.github.io/" class="author-link">Ellis Brown</a></p>
+                    <p><a href="https://jihanyang.github.io/" class="author-link">Jihan Yang</a></p>
+                    <p><a href="https://cs.nyu.edu/~fergus/pmwiki/pmwiki.php" class="author-link">Rob Fergus</a></p>
+                    <p><a href="http://yann.lecun.com/" class="author-link">Yann LeCun</a></p>
+                    <p><a href="https://www.sainingxie.com/" class="author-link">Saining Xie</a></p>
+                </div>
+                <div class="byline-column">
+                    <h3>Affiliations</h3>
+                    <p><a href="https://cs.nyu.edu/home/index.html" class="affiliation-link">New York University</a></p>
+                </div>
+                <div class="byline-column">
+                    <h3>Resources</h3>
+                    <p><a href="" class="affiliation-link">Paper</a></p>
+                    <p><a href="" class="affiliation-link">Code Repository</a></p>
+                    <p><a href="" class="affiliation-link">Hugging Face Models</a></p>
+                </div>
+            </div>
+        </div>
+        <d-contents>
+            <nav>
+                <h4>Contents</h4>
+                <div><a href="#overview">Overview</a></div>
+                <div><a href="#autoencoders">High Fidelity Reconstruction from RAE</a></div>
+                <div><a href="#diffusion">Taming Diffusion Transformers for RAE</a></div>
+                <div><a href="#sec-ddt">Improve the Model Scalability with Wide Diffusion Head</a></div>
+                <div><a href="#sec-discussions">Discussions</a></div>
+                <div><a href="#sec-conclusion">Conclusion</a></div>
+            </nav>
+        </d-contents>
+
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>
+      Representation Autoencoders (RAEs) have shown distinct advantages in diffusion modeling on ImageNet by training in high-dimensional semantic latent spaces.
+    In this work, we investigate whether this framework can scale to large-scale, freeform text-to-image (T2I) generation.
+    We first scale RAE decoders beyond ImageNet by training a decoder on the frozen representation encoder (SigLIP-2) on web, synthetic, and text-rendering data, revealing that data quantity and composition of data matters for reconstruction.
+    We then revisit the RAE design components for T2I, finding that dimension-dependent noise scheduling remains crucial, while architectural modifications such as wide DDT heads and noise-augmented decoding become unnecessary at scale.
+    Building on these insights, we conduct a controlled comparison of RAE against the state-of-the-art FLUX VAE across diffusion transformer (DiT) scales from 0.5B to 9.8B parameters.
+    RAEs consistently outperform VAEs during pretraining across all model scales. Further, during finetuning on high-quality datasets, VAE-based models catastrophically overfit after 64 epochs, while RAE models remain stable through 256 epochs and achieve consistently better performance.
+    Across all experiments, RAE-based diffusion models demonstrate faster convergence and better generation quality, establishing RAEs as a simpler and stronger foundation than VAEs for large-scale T2I generation.
+    Additionally, because both visual understanding and generation can operate in a shared semantic latent space, the multimodal model can directly reason over generated latents, opening new possibilities for unified models.
+            <d-figure id="fig-teaser">
+                <figure id="fig-teaser-inner" class="l-body">
+                    <img src="images/rae-t2i/teaser.png" alt="Pipeline overview for representation autoencoders"> 
+                    <figcaption><strong>RAE converges faster than VAE in text-to-image pretraining.</strong>  We train Qwen-2.5 1.5B + DiT 2.4B models from scratch on both RAE (SigLIP-2) and VAE (FLUX) latent spaces for up to 60k iterations.
+    RAE converges significantly faster than VAE on both GenEval (4.0×) and DPG-Bench (4.6×).</figcaption>
+                </figure>
+            </d-figure>
+        </section>
+
+        <section id="autoencoders">
+            <h2>Scaling Decoder Training Beyond ImageNet</h2> 
+            <p> To scale the representation autoencoder in the T2I domain, we first train a RAE decoder on a larger and more diverse dataset than ImageNet.
+Throughout this section, we choose SigLIP-2 So400M (patch size 14)<d-cite key="tschannen2025siglip"></d-cite> as the frozen encoder, and train a ViT-based decoder to reconstruct the image from these tokens at $224\times224$ resolution.</p>
+
+            <d-figure id="fig-recon-compare">
+                <figure id="fig-recon-compare-inner" class="l-body">
+                    <img src="images/rae-t2i/recon_compare.png" alt="RAE decoders trained on more data (web, synthetic text) generalize across domains.">
+                    <figcaption><strong>Decoders trained only on ImageNet reconstruct natural images well but struggle with text-rendering scenes.</strong> 
+        Adding web and text data greatly improves text reconstruction while maintaining natural-image quality. 
+        Compared to proprietary VAEs, RAE achieves competitive overall fidelity.</figcaption>
+                </figure>
+            </d-figure>
+
+            <h3>Training objective and data.</h3>
+            <p>
+            Following RAE, we adopt $\ell_1$, LPIPS<d-cite key="lpips"></d-cite>, and adversarial losses<d-cite key="styleganxl"></d-cite><d-cite key="GAN"></d-cite>. Additionally, we integrate Gram Loss<d-cite key="gramloss"></d-cite>, which is found beneficial for reconstruction<d-cite key="atoken"></d-cite>. The training objective is set as 
+            
+            $
+L(x, \hat{x}) = \ell_1(x, \hat{x}) + \omega_L \text{LPIPS}(x, \hat{x}) + \omega_G \text{Gram}(x, \hat{x}) +  \omega_A \text{Adv}(x,\hat{x})$. 
+            </p>
+
+            <p>
+              We use a dataset combining roughly 73M data from three main data sources: web image sources from FuseDiT<d-cite key="Tang_2025_CVPR"></d-cite>, synthetic images generated by FLUX.1-schnell<d-cite key="flux"></d-cite>, and RenderedText<d-cite key="wendlerc2024renderedtext"></d-cite>, which focuses on text-rendering scenes.
+Details are provided in <a href="#overview">Section</a>.
+            </p>
+
+            <h2>Data matters for reconstruction fidelity of RAE</h2>
+            <p>
+              As shown in <a href="#tab-data-matters-for-rae-s-reconstruction-fidelity-trai">the following table</a>, expanding decoder training beyond ImageNet to include web-scale and synthetic data yields only marginal gains on ImageNet itself, but provides moderate improvements on more diverse images (YFCC). This indicates that exposure to a broader distribution enhances the decoder’s generalizability.
+Text images, however, form a notable exception. For text reconstruction, training on Web + Synthetic data yields little improvement over ImageNet-only training. In contrast, performance improves substantially once text-specific data is included, highlighting that reconstruction quality is very sensitive to the composition of the training data. As shown in~<a href="#fig-recon-compare">the figure above</a>, training the RAE decoder with additional text data is essential for accurate text reconstruction.
+Overall, RAE reconstruction improves with scale, but the composition of data---not just its size---matters: each domain benefits most from domain-matched coverage.
+            </p>
+
+<table style="width:100%; margin-top:25px; border-collapse:separate; border-spacing:12px;">
+  <tr>
+  <!-- Data matters for reconstruction fidelity -->
+  <td style="vertical-align:top; width:33%;">
+    <figure id="tab-data-matters-for-rae-s-reconstruction-fidelity-trai">
+      <table class="display-table" style="width:100%;">
+        <tr>
+          <th style="text-align:left;">Data Sources</th>
+          <th>#Data</th>
+          <th>ImageNet ↓</th>
+          <th>YFCC ↓</th>
+          <th>Text ↓</th>
+        </tr>
+
+        <tr style="background-color:#f5f5f5;">
+          <td style="text-align:left;">ImageNet</td>
+          <td>1.28M</td>
+          <td>0.462</td>
+          <td>0.970</td>
+          <td>2.640</td>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">Web</td>
+          <td>39.3M</td>
+          <td>0.529</td>
+          <td><strong>0.629</strong></td>
+          <td>2.325</td>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">Web + Synthetic</td>
+          <td>64.0M</td>
+          <td>0.437</td>
+          <td>0.683</td>
+          <td>2.406</td>
+        </tr>
+
+        <tr style="background-color:#e8f5e9;">
+          <td style="text-align:left;">Web + Synthetic + Text</td>
+          <td>73.0M</td>
+          <td><strong>0.435</strong></td>
+          <td>0.702</td>
+          <td><strong>1.621</strong></td>
+        </tr>
+      </table>
+
+      <figcaption style="text-align:center; margin-bottom:6px;">
+        <strong>Data matters for RAE's reconstruction fidelity.</strong>
+        Training on web-scale images consistently improves reconstruction quality across all domains.
+      </figcaption>
+    </figure>
+  </td>
+</tr>
+</table>
+
+<h2>Different encoders</h2>
+<p>
+We also evaluate RAE using different pretrained encoders. In particular, we replace SigLIP-2 with WebSSL-L<d-cite key="fan2025scaling"></d-cite>, a large-scale self-supervised model. As shown in~<a href="#tab-comparison-of-reconstruction-performance-after-expa">the following table</a>, WebSSL-L achieves stronger reconstruction performance than SigLIP-2 across all domains. Both SigLIP-2 and WebSSL-L consistently outperform SDXL VAE, though they still fall short of FLUX VAE.
+</p>
+
+<table>
+    <tr>
+  <!-- Comparison of reconstruction performance -->
+  <td style="vertical-align:top; width:33%;">
+    <figure id="tab-comparison-of-reconstruction-performance-after-expa">
+      <table class="display-table" style="width:100%;">
+        <tr>
+          <th style="text-align:left;">Family</th>
+          <th style="text-align:left;">Model</th>
+          <th>ImageNet ↓</th>
+          <th>YFCC ↓</th>
+          <th>Text ↓</th>
+        </tr>
+
+        <!-- VAE -->
+        <tr>
+          <td rowspan="2" style="text-align:left; vertical-align:middle;">VAE</td>
+          <td style="text-align:left;">SDXL</td>
+          <td>0.930</td>
+          <td>1.168</td>
+          <td>2.057</td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">FLUX</td>
+          <td>0.288</td>
+          <td>0.410</td>
+          <td>0.638</td>
+        </tr>
+
+        <!-- RAE -->
+        <tr>
+          <td rowspan="2" style="text-align:left; vertical-align:middle;">RAE</td>
+          <td style="text-align:left;">WebSSL ViT-L</td>
+          <td>0.388</td>
+          <td>0.558</td>
+          <td>1.372</td>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">SigLIP-2 ViT-So</td>
+          <td>0.435</td>
+          <td>0.702</td>
+          <td>1.621</td>
+        </tr>
+      </table>
+
+      <figcaption style="text-align:center; margin-bottom:6px;">
+        <strong>Comparison of reconstruction performance.</strong>
+        After expanding training data, RAE outperforms SDXL-VAE across all domains, though it still trails FLUX-VAE. Within RAE variants, WebSSL reconstructs better than SigLIP-2.
+      </figcaption>
+    </figure>
+  </td>
+</tr>
+</table>
+        </section>
+
+        <section id="diffusion">
+            <h2>Exploring RAE in T2I</h2>
+            <p>
+              In this section, we extend the recently proposed RAE framework to the T2I domain and systematically stress-test its core design choices under large-scale multimodal settings. In particular, we investigate whether the \emph{dimension-dependent noise schedule}, the \emph{noise-augmented decoding} strategy, and the \emph{wide DDT head} (DiT<sup>DH</sup>)---all central to RAE’s effectiveness on image reconstruction---remain equally important when scaling diffusion models.
+            </p>
+            <p>
+            We adopt the MetaQuery architecture<d-cite key="metaquery"></d-cite> for text-to-image (T2I) generation and unified modeling. 
+The model begins with a pretrained language model and introduces a set of learnable query tokens that are prepended to the text prompt. 
+The LLM jointly processes the text and queries, producing query-token representations that serve as the conditioning signal. 
+A 2-layer MLP connector then projects these representations from the LLM’s hidden space into the Diffusion Transformer (DiT)<d-cite key="dit"></d-cite>.
+</p>
+<p>
+For this DiT model, we adopt a design based on LightningDiT<d-cite key="lgt"></d-cite> and train it using the flow matching objective<d-cite key="fm"></d-cite>. Critically, our model does not operate in a compressed VAE space. Instead, the DiT learns to model the distribution of high-dimensional, semantic representations generated by the frozen representation encoder. During inference, the DiT generates a set of features conditioned on the query tokens, which are then passed to our trained RAE decoder for rendering into pixel space. 
+</p>
+<p>
+We also train visual instruction tuning<d-cite key="liu2023improved"></d-cite><d-cite key="liu2023visual"></d-cite> for image understanding. For this, we use a separate 2-layer MLP projector that maps visual tokens into the LLM’s embedding space. Importantly, these visual tokens come from the <textbf>same</textbf> frozen representation encoder whose features the diffusion model is trained to generate.
+</p>
+
+            <d-figure id="fig-arch">
+              <figure id="fig-arch-inner" class="l-body">
+                  <img src="images/rae-t2i/arch.png" id="arch.png" alt="Model architecture operating on RAE tokens">
+                  <figcaption>Overview of training pipeline. Left: RAE decoder training stage. We train a decoder on the representations (yellow tokens) produced by the frozen RAE encoder. Right: End-to-end unified training of the autoregressive model, diffusion transformer, and learnable query tokens (gray tokens) using cross-entropy (CE) loss for text prediction and a flow-matching objective for image prediction.</figcaption>
+              </figure>
+            </d-figure>
+
+            <h3>Noise scheduling remains crucial for T2I</h3>
+            <p>
+             The RAE work<d-cite key="zheng2025diffusion"></d-cite> argues that conventional noise schedules become suboptimal when applied to high-dimensional latent spaces. 
+The paper proposes a \emph{dimension-dependent noise schedule shift} that rescales the diffusion timestep according to the effective data dimension $m = N \times d$ (number of tokens $\times$ token dimension). Formally, given a base schedule $t_n \in [0, 1]$ defined for a reference dimension $n$, the shifted timestep is computed as
+\vspace{-0.3em}
+
+\begin{equation*}
+t_m = \frac{\alpha t_n}{1 + (\alpha - 1)t_n}, \quad \text{where} \quad \alpha = \sqrt{\frac{m}{n}}.
+\end{equation*}
+            </p>
+
+<p>We follow the RAE setting and use $n{=}4096$ as the base dimension for computing the scaling factor $\alpha$.
+We experiment with and without applying the dimension-dependent shift when training text-to-image diffusion models on RAE latents, as shown below. </p>
+
+            <div style="max-width: 1000px; margin: 0 auto;">
+              <table style="width:100%; margin-top:-10px; margin-left: -20px; margin-bottom: -20px; border-collapse:separate; border-spacing:12px; border: none;">
+                <tr>
+  <!-- Effect of shift setting -->
+  <td style="vertical-align:top; width:33%;">
+    <figure id="tab-effect-of-shift-on-geneval-and-dpg-bench-performance">
+      <table class="display-table" style="width:100%;">
+        <tr>
+          <th style="text-align:left;">Setting</th>
+          <th>GenEval ↑</th>
+          <th>DPG-Bench ↑</th>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">w/o shift</td>
+          <td>23.6</td>
+          <td>54.8</td>
+        </tr>
+
+        <tr style="background-color:#e8f5e9;">
+          <td style="text-align:left;">w/ shift</td>
+          <td><strong>49.6</strong></td>
+          <td><strong>76.8</strong></td>
+        </tr>
+      </table>
+
+      <figcaption style="text-align:center; margin-bottom:6px;">
+        Effect of shift on GenEval and DPG-Bench performance.
+      </figcaption>
+    </figure>
+  </td>
+</tr>
+              </table>
+            </div>
+
+            <p>Consistent with<d-cite key="zheng2025diffusion"></d-cite>, applying the noise shift dramatically improves both GenEval and DPG-Bench scores, demonstrating that adjusting the schedule to the effective latent dimension is critical for T2I. </p>
+
+            <h3>Design Choices that Saturate at Scale</h3>
+            <p>
+While dimension-aware noise scheduling proves essential (<a href="#overview">Section</a>), we find that other design choices in RAE<d-cite key="zheng2025diffusion"></d-cite>, which was originally developed for smaller-scale ImageNet models, provide diminishing returns at T2I scale.
+Here we examine two such techniques: noise-augmented decoding and the wide DDT head (\DDT{}).
+            </p>
+
+            <h4>Noise-augmented decoding.</h4>
+            <p>
+RAE proposes a noise-augmented decoding strategy to bridge the mismatch between clean encoder latents used during training and slightly perturbed latents generated at inference.
+Formally, it trains the RAE decoder on smoothed inputs \(z' = z + n\), where \(n \sim \mathcal{N}(0,\, \sigma^2 I)\ and \(\sigma\) is sampled from \(|\mathcal{N}(0,\, \tau^2)|\).
+            </p>
+
+            <p>
+We visualize the effect of noise-augmented decoding at different training stages in <a href="#fig-noisedecoding-gain">the following figure</a>.
+The gains are noticeable early in training (before \(\sim\)15k steps), when the model is still far from convergence, but become negligible at later stages.
+This suggests that noise-augmented decoding acts as a form of regularization that matters most when the model has not yet learned a robust latent manifold.
+            </p>
+          
+              <d-figure id="fig-noisedecoding-gain">
+                <figure id="fig-noisedecoding-gain-inner" class="l-body">
+                    <img src="images/rae-t2i/noisedecoding-gain.png" alt="Effect of noise-augmented decoding at different training stages">
+                    <figcaption>Noise-augmented decoding gains diminish with training.</figcaption>
+                </figure>
+            </d-figure>
+
+            <p>In the following sections, we investigate ways to make RAE generation more efficient and effective, pushing it toward state-of-the-art performance.</p>
+            
+            <h4>Wide DDT Head</h4>
+            <p>The \DDT{} architecture augments a standard DiT with a shallow but wide DDT head, increasing denoising width without widening the entire backbone.
+The original RAE experiments were conducted at smaller model scales, where the DiT backbones had hidden widths around 1024, comparable to the RAE latent width (e.g., SigLIP-2 has 1152-dim tokens).
+In that regime, widening the DDT head compensates for the backbone's limited width without incurring the computational cost of widening the full network architecture.
+            </p>
+
+            <p>
+Our T2I setting is substantially different: DiTs at $\geq$2B parameters are already wide by construction, and the data regime is far more diverse than ImageNet.
+We revisit \DDT{} under these larger-scale conditions to determine whether its advantages persist when both model capacity and data complexity increase.
+Specifically, we train three DiT variants \{0.5B, 2.4B, 3.1B\} and construct their corresponding \DDT{} counterparts by appending a two-layer, wide (\(d{=}2688\)) DDT head, which introduces an additional +0.28B parameters to each model configuration.
+            </p>
+
+<p>
+<a href="#fig-ddtvsdit">The following figure</a> shows that the benefits of \DDT{} are most pronounced at smaller scales.
+At 0.5B parameters, \DDT{} achieves substantial improvement, demonstrating that the wide DDT head effectively addresses the width bottleneck when backbone capacity is limited.
+However, as model size increases to 2.4B and 3.1B, the performance gap narrows considerably, suggesting that raw model capacity increasingly dominates over architectural modifications.
+</p>
+
+              <d-figure id="fig-ddtvsdit">
+                <figure id="fig-ddtvsdit-inner" class="l-body">
+                    <img src="images/rae-t2i/ddtvsdit.png" alt="DiT with DDT head vs. standard DiT at different model scales">
+                    <figcaption>\DDT{} yields large gains at 0.5B (+11.2 GenEval), but the advantage diminishes at $>$2.4B, where backbone capacity dominates.</figcaption>
+                </figure>
+            </d-figure>
+          </section>
+
+<section id="sec-ddt" style="margin-top:24px;">
+  <h2>Training Diffusion Model with RAE vs. VAE</h2>
+
+  <p>
+In this section, we conduct an extensive study comparing text-to-image diffusion training using the RAE (SigLIP-2) encoder versus a standard VAE. For the VAE baseline, we adopt the state-of-the-art model from FLUX<d-cite key="flux"></d-cite>. All experiments follow the same setup described in <a href="#overview">Section</a>, with identical training configurations; the only difference lies in whether diffusion is performed in the RAE or VAE latent space. We defer implementation details to <a href="#appendix">the appendix</a>.
+</p>
+
+<h3>Experimental Protocol.</h3>
+
+<p>We organize our comparison into two stages: <em>pretraining</em> and <em>finetuning</em>. We train the Diffusion Transformer <em>from scratch</em> in each latent space (RAE vs. VAE) to remove confounding factors. We ensure apples-to-apples comparison. The <em>only</em> component that differs is the latent space and its decoder (SigLIP-2 RAE vs. FLUX VAE). 
+For the VAE baseline, this corresponds to the standard two-tower vision–language setup used in recent unified models such as Bagel<d-cite key="deng2025emerging"></d-cite> and UniFluid<d-cite key="fan2025unified"></d-cite>. 
+  </p>
+
+  <h3>Pretraining.</h3>
+  <h4>Convergence.</h4>
+  <p>
+We first compare the convergence behavior.
+We train a Qwen2.5-1.5B LLM with a 2.4B DiT backbone.
+As shown in <a href="#fig-teaser">the figure above</a>, the RAE-based model converges significantly faster than its VAE counterpart, achieving a 4.0× speedup on GenEval and a 4.6× speedup on DPG-Bench.
+  </p>
+
+<h4>Scaling.</h4>
+We use Qwen-2.5 1.5B as the language backbone, and train DiT variants of 0.5B, 2.4B, 5.5B, and 9.8B parameters. The architectures of these DiT variants are designed following recent advances in large-scale vision models<d-cite key="esser2024scaling"></d-cite><d-cite key="fan2025scaling"></d-cite><d-cite key="wan2025wan"></d-cite><d-cite key="wu2025qwen"></d-cite>, and detailed model specifications are provided in <a href="#appendix">the appendix</a>. In this experiment, we train all the models for 30k iterations with a batch size of 2048.
+
+<d-figure id="fig-llm-dit-scaling">
+    <figure id="fig-llm-dit-scaling-inner" class="l-body">
+        <img src="images/rae-t2i/llm-dit-scaling.png" alt="Pretraining scaling comparison between RAE and VAE">
+        <figcaption>RAE consistently outperforms VAE across all model scales during pretraining. The performance gap widens with scale, indicating that RAE scales more effectively than VAE.</figcaption>
+    </figure>
+</d-figure>
+
+<p>
+In <a href="#fig-llm-dit-scaling">the figure above</a>, we find that RAE-based models consistently outperform their VAE counterparts at all scales. 
+Even for the smallest 0.5B DiT, where the network width only slightly exceeds the RAE latent dimension, the RAE-based model still shows clear advantages over the VAE baseline.
+</p>
+
+<p>We also observe diminishing returns when scaling DiT models beyond 6B parameters. The performance trend appears to plateau, suggesting that simply increasing model size without proportionally improving data quality and diversity may lead to underutilized capacity.
+This observation aligns with discussions in large-scale visual SSL literature<d-cite key="fan2025scaling"></d-cite>, which highlight the need for high-quality data scaling to fully exploit model capacity.</p>
+
+  <h3>Generalizing to other vision encoders.</h3>
+  <p>
+We also experiment with training RAE with WebSSL ViT-L<d-cite key="fan2025scaling"></d-cite>. 
+Under the same 1.5B LLM and 2.4B DiT setup, the WebSSL RAE performs slightly below the SigLIP-2 version but still exceeds the FLUX VAE baseline (<a href="#tab-ssl-encoders-are-effective-rae-backbones-for-t2i-a">the following table</a>), showing that RAE works well with different pretrained encoders.
+  </p>
+
+<table>
+<tr>
+  <!-- SSL encoders as RAE backbones for T2I -->
+  <td style="vertical-align:top; width:33%;">
+    <figure id="tab-ssl-encoders-are-effective-rae-backbones-for-t2i-a">
+      <table class="display-table" style="width:100%;">
+        <tr>
+          <th style="text-align:left;">Model Variant</th>
+          <th>GenEval ↑</th>
+          <th>DPG-Bench ↑</th>
+        </tr>
+
+        <!-- VAE-based models -->
+        <tr style="background-color:#f0f0f0;">
+          <td colspan="3" style="text-align:left; font-weight:600;">
+            VAE-based models
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">FLUX VAE</td>
+          <td>39.6</td>
+          <td>70.5</td>
+        </tr>
+
+        <!-- RAE-based models -->
+        <tr style="background-color:#f0f0f0;">
+          <td colspan="3" style="text-align:left; font-weight:600;">
+            RAE-based models
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">WebSSL ViT-L</td>
+          <td>46.0</td>
+          <td>72.8</td>
+        </tr>
+        <tr style="background-color:#e8f5e9;">
+          <td style="text-align:left;">SigLIP-2 ViT-So</td>
+          <td><strong>49.5</strong></td>
+          <td><strong>76.9</strong></td>
+        </tr>
+      </table>
+
+      <figcaption style="text-align:center; margin-bottom:6px;">
+        <strong>SSL encoders are effective RAE backbones for T2I.</strong>
+        A WebSSL-based RAE performs slightly worse than SigLIP-2 but remains stronger than FLUX VAE.
+      </figcaption>
+    </figure>
+  </td>
+</tr>
+</table>
+
+  <h3>Finetuning.</h3>
+  <p>
+Following standard practice in T2I training<d-cite key="dai2023emu"></d-cite><d-cite key="pixartalpha"></d-cite><d-cite key="podell2023sdxl"></d-cite>, models are finetuned on a smaller high-quality dataset after large-scale pretraining. 
+We run this finetuning stage for both RAE- and VAE-based models under identical settings. 
+Unless otherwise noted, we use the BLIP-3o 60k dataset<d-cite key="blip3o"></d-cite> and start from the 1.5B LLM + 2.4B DiT checkpoint trained for 30k steps in <a href="#overview">Section</a>. We update both the LLM and the DiT; additional details are provided in <a href="#appendix">the appendix</a>.
+</p>
+
+  <p>
+  <strong>RAE-based models consistently outperform VAE-based models.</strong> We finetune both family of models for \{4, 16, 64, 128, 256\} epochs and compare the performance on GenEval and DPG-Bench in <a href="#fig-finetune-perf">the following figure</a>. 
+We observe that across all iterations, the RAE-based model shows an advantage on both GenEval and DPG-Bench across all settings. 
+  </p>
+
+  <p>
+    <strong>RAE-based models are less prone to overfitting.</strong> As shown in~<a href="#fig-finetune-perf">the following figure</a>, VAE-based models begin to degrade in performance after 64 epochs and deteriorate more noticeably by 256, whereas RAE-based models remain stable and show only a mild decline. 
+Examining the diffusion loss curves (see <a href="#appendix">the appendix</a>)
+suggests that this difference stems from overfitting in the VAE setting—the training loss drops rapidly and deeply—while the RAE loss decreases more gradually and stabilizes at a higher value. 
+We hypothesize that the higher-dimensional and semantically structured latent space of the RAE\footnote{SigLIP-2 produces 1152-dim. tokens vs. $<$100 in typical VAEs}
+may provide an implicit regularization effect, helping mitigate overfitting during finetuning.
+  </p>
+
+<d-figure id="fig-finetune-perf">
+    <figure id="fig-finetune-perf-inner" class="l-body">
+        <img src="images/rae-t2i/finetune-perf.png" alt="Finetuning comparison between RAE and VAE">
+        <figcaption><strong>RAE-based models outperform VAE-based models and are less prone to overfitting.</strong> 
+        We train both models for 256 epochs and observe that (1) RAE-based models consistently achieve higher performance, and (2) VAE-based models begin to overfit rapidly after 64 epochs.</figcaption>
+    </figure>
+</d-figure>
+
+<p>
+<strong>RAE's advantage generalizes across settings.</strong> To verify whether RAE's advantage over VAE extends beyond our main setup, we conduct two additional experiments: 1) fine-tuning only the DiT while freezing the LLM (following recent works<d-cite key="metaquery"></d-cite><d-cite key="blip3o"></d-cite>), and 2) scaling to different sizes DiT models (0.5B--9.8B parameters).
+<a href="#fig-finetune-scaling">The following figure</a> shows that RAE consistently outperforms VAE in both settings. The left panel shows that both selective fine-tuning (DiT-only) and joint fine-tuning (LLM+DiT) favor RAE over VAE; notably, the top-performing VAE configuration reaches 78.2, while the weakest RAE approach achieves 79.4. The right panel shows continued RAE gains across the scaling range, with larger models exhibiting greater improvements. We include the DPG-bench results in <a href="#appendix">the appendix</a>.
+</p>
+
+<d-figure id="fig-finetune-scaling">
+    <figure id="fig-finetune-scaling-inner" class="l-body">
+        <img src="images/rae-t2i/finetune-scaling.png" alt="Scaling finetune comparing RAE and VAE">
+        <figcaption><strong>RAE-based models outperform VAEs across different settings.</strong>
+        <em>Left</em>: When fine-tuning only the DiT versus the full LLM+DiT system, RAE models consistently achieve higher GenEval scores.
+        <em>Right</em>: RAE models maintain their advantage over VAE across all DiT model scales (0.5B--9.8B parameters), with the performance gap widening as model size increases.</figcaption>
+    </figure>
+</d-figure>
+
+</section>
+
+<section id="sec-discussions" style="margin-top:40px;">
+  <h2>Implications for Unified Models</h2>
+
+  <h3>Visual understanding.</h3>
+  <p>
+   We conduct a comparative study to study how the choice of visual generation backbone—VAE versus RAE—affects multimodal understanding performance. 
+We evaluate the trained models on standard benchmarks: MME<d-cite key="fu2023mme"></d-cite>, TextVQA<d-cite key="singh2019towards"></d-cite>, AI2D<d-cite key="hiippala2021ai2d"></d-cite>, SeedBench<d-cite key="ge2023planting"></d-cite>, MMMU<d-cite key="yue2023mmmu"></d-cite>, and MMMU-Pro<d-cite key="yue2024mmmu"></d-cite>. 
+We emphasize that the goal of this work is not to build a SOTA VQA model; achieving that would require additional components such as any-resolution inputs, multimodal continual pretraining, and very high-quality data.
+  </p>
+
+  <p>
+Similar to prior findings<d-cite key="metamorph"></d-cite><d-cite key="fan2025unified"></d-cite><d-cite key="deng2025emerging"></d-cite>, we observe in <a href="#tab-generative-training-leaves-understanding-intact-rae-and-vae">the following table</a> that adding generative modeling does not degrade visual understanding performance. The choice of RAE vs. VAE in the generative path has little impact, likely because both variants share the same frozen understanding encoder.
+  </p>
+
+<table>
+  <tr>
+  <!-- VL benchmark evaluation -->
+  <td style="vertical-align:top; width:33%;">
+    <figure id="tab-generative-training-leaves-understanding-intact-rae-and-vae">
+      <table class="display-table" style="width:100%;">
+        <tr>
+          <th style="text-align:left;">Model</th>
+          <th>MME<sub>P</sub></th>
+          <th>TVQA</th>
+          <th>AI2D</th>
+          <th>Seed</th>
+          <th>MMMU</th>
+          <th>MMMU<sub>P</sub></th>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">Und.-only</td>
+          <td>1374.8</td>
+          <td>44.7</td>
+          <td>63.9</td>
+          <td>67.1</td>
+          <td>40.2</td>
+          <td>20.5</td>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">RAE-based</td>
+          <td>1468.7</td>
+          <td>39.6</td>
+          <td>66.7</td>
+          <td>69.8</td>
+          <td>41.1</td>
+          <td>19.8</td>
+        </tr>
+
+        <tr>
+          <td style="text-align:left;">VAE-based</td>
+          <td>1481.7</td>
+          <td>39.3</td>
+          <td>66.7</td>
+          <td>69.7</td>
+          <td>37.2</td>
+          <td>18.7</td>
+        </tr>
+      </table>
+
+      <figcaption style="text-align:center; margin-bottom:6px;">
+        <strong>Generative training leaves understanding intact; RAE and VAE perform similarly.</strong>
+        Across VL benchmarks, both latent choices produce comparable understanding performance.
+      </figcaption>
+    </figure>
+  </td>
+</tr>
+</table>
+
+  <div style="clear:both;"></div>
+
+  <h3>Test-time scaling in latent space.</h3>
+  <p>
+    A unique advantage of using RAE for generation is that the LLM operates entirely in the same latent space used for image understanding, leaving the representation and pixel spaces fully <em>decoupled</em>. This allows the LLM to produce latents it can directly interpret, without the need for repeated decode–re-encode cycles between pixels and features. 
+  </p>
+
+  <p>
+Here, we demonstrate one direct benefit of operating in a unified latent space: the LLM itself can act as a <textit>verifier</textit> for the latents generated by the diffusion model. This enables a new test-time scaling (tts) method that operates <em>only</em> in the latent space, which we refer to as latent-tts (<a href="#fig-tts-arch">the following figure</a>). 
+</p>
+
+<d-figure id="fig-tts-arch">
+    <figure id="fig-tts-arch-inner" class="l-body">
+        <img src="images/rae-t2i/tts-arch.png" alt="Latent-space test-time scaling with LLM verifier">
+        <figcaption><strong>Test-time scaling in latent space.</strong>
+        Our framework allows the LLM to directly evaluate and select generation results within the latent space, bypassing the decode-re-encode process.</figcaption>
+    </figure>
+</d-figure>
+
+<p>
+We consider two verifier metrics: <strong>Prompt Confidence</strong> and <strong>Answer Logits</strong>. For Prompt Confidence, we follow~\citet{kang2025scalable}: re-injecting the generated latents along with the original prompt into the LLM and aggregating token-level logits to obtain a confidence score. For Answer Logits, we query the LLM with the question, <textit>``Does this generated image $\langle$image$\rangle$ align with the $\langle$prompt$\rangle$?''}</textit>, and uses the logit of the ``yes'' token. If the LLM responds ``no'', we use the negative logit of the “no” token as the score.
+</p>
+
+<p>
+With the verifier defined, we adopt the standard test-time scaling protocol<d-cite key="ma2025inference"></d-cite><d-cite key="xie2025sana"></d-cite> using a best-of-$N$ selection strategy. As shown in~<a href="#tab-tts-results-across-llm-dit-configurations-substanti">the following table</a>, both verification metrics yield consistent improvements on GenEval, demonstrating that latent-space TTS is not only feasible but also an effective way to enhance generation quality.
+</p>
+
+<table>
+<tr>
+  <!-- TTS results across LLM–DiT configurations -->
+  <td style="vertical-align:top; width:33%;">
+    <figure id="tab-tts-results-across-llm-dit-configurations-substanti">
+      <table class="display-table" style="width:100%;">
+        <tr>
+          <th style="text-align:left;">Best-of-N</th>
+          <th>Prompt Confidence</th>
+          <th>Answer Logits</th>
+        </tr>
+
+        <!-- 1.5B LLM + 5.5B DiT -->
+        <tr style="background-color:#f0f0f0;">
+          <td colspan="3" style="text-align:left; font-weight:600; font-size:90%;">
+            1.5B LLM + 5.5B DiT (GenEval = 53.2)
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">4/8</td>
+          <td>56.7</td>
+          <td>59.6</td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">4/16</td>
+          <td>57.5</td>
+          <td>62.5</td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">4/32</td>
+          <td>60.0</td>
+          <td>64.3</td>
+        </tr>
+
+        <!-- 7.0B LLM + 5.5B DiT -->
+        <tr style="background-color:#f0f0f0;">
+          <td colspan="3" style="text-align:left; font-weight:600; font-size:90%;">
+            7.0B LLM + 5.5B DiT (GenEval = 55.5)
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">4/8</td>
+          <td>58.3</td>
+          <td>62.5</td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">4/16</td>
+          <td>59.6</td>
+          <td>65.8</td>
+        </tr>
+        <tr>
+          <td style="text-align:left;">4/32</td>
+          <td>60.1</td>
+          <td>67.8</td>
+        </tr>
+      </table>
+
+      <figcaption style="text-align:center; margin-bottom:6px;">
+        <strong>TTS results across LLM–DiT configurations.</strong>
+        Substantial performance improvements are observed with both verifier metrics on GenEval.
+        “4/8” refers to selecting the best 4 out of 8 samples.
+      </figcaption>
+    </figure>
+  </td>
+</tr>
+</table>
+
+  <div style="clear:both;"></div>
+</section>
+
+<section id="sec-conclusion" style="margin-top:40px;">
+  <h2>Conclusion</h2>
+  <p></p>
+</section>
+
+    </d-article>
+
+        <d-appendix id="appendix">
+            <h3>BibTeX</h3>
+            <p class="bibtex">
+                @misc{zheng2025diffusiontransformersrepresentationautoencoders,<br>
+                &nbsp;&nbsp;title={Scaling Text-to-Image Diffusion Transformers with Representation Autoencoders},<br>
+                &nbsp;&nbsp;author={
+                  Shengbang Tong and Boyang Zheng and Ziteng Wang and 
+Bingda Tang and Nanye Ma and Ellis Brown and Jihan Yang and Rob Fergus and Yann LeCun and Saining Xie
+                },<br>
+                &nbsp;&nbsp;year={2025},<br>
+                &nbsp;&nbsp;eprint={},<br>
+                &nbsp;&nbsp;archivePrefix={arXiv},<br>
+                &nbsp;&nbsp;primaryClass={cs.CV}<br>
+                }
+            </p>
+            <d-footnote-list></d-footnote-list>
+            <d-citation-list></d-citation-list>
+        </d-appendix>
+
+        <!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
+    <d-bibliography src="bibliography.bib"></d-bibliography>
+    <script src="contents_bar.js"></script> <!-- for scroll/toc -->
+    </body>
+</html>
